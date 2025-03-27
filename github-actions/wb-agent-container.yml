@@ -1,0 +1,53 @@
+## This workflow runs any time code is pushed to a branch.
+## By doing so, Branches always have up-to-date results in Workbench.
+name: Update Branch Scan
+on: push
+      
+jobs:
+  fossid_scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+# The Workbench Agent works best when an archive is provided for analysis.
+      - name: Zip Code; Ignoring File Types
+        run: |
+          zip -r $GITHUB_WORKSPACE/code.zip . -x \
+          '*.tmp' '*.temp' '*.bak' \
+          '*.cache' '*.db' '*.idx' \
+          '*.log' '*.txt' '*.event' \
+          '*.sample' '*.demo' '*.example' \
+          '*.sql' '*.hprof' '*.dmp' \
+          '.gitignore' '.dockerignore' \
+          '.git/*' '.github/*'
+
+# Running the Container requires credentials to FossID's Quay Registry.
+# Reach out to FossID Support if you don't have these handy.
+
+      - name: Authenticate to Quay
+        uses: docker/login-action@v2
+        with:
+          registry: quay.io/fossid
+          username: ${{ secrets.QUAY_USER }}
+          password: ${{ secrets.QUAY_TOKEN }}
+
+# In this example, we omit License Extraction to speed up the scan process.
+# We also use Built-In Env Vars to map Projects and Scans in Workbench to Repos and Branches.
+# Additionally, Delta Scan and Identification Reuse are enabled to reduce scan time and avoid extra Identification work.
+      - name: Run Workbench Agent
+        run: |
+          docker run -v ${{ github.workspace }}:/tmp/scan_target \
+                     quay.io/fossid/workbench-agent:0.7.0 \
+            --api_url ${{ secrets.WORKBENCH_URL }} \
+            --api_user ${{ secrets.WORKBENCH_USER }} \
+            --api_token ${{ secrets.WORKBENCH_TOKEN }} \
+            --project_code $GITHUB_REPOSITORY \
+            --scan_code $GITHUB_REPOSITORY/$GITHUB_REF_NAME \
+            --path $GITHUB_WORKSPACE/code.zip \
+            --chunked_upload \
+            --reuse_identifications \
+            --identification_reuse_type specific_project \
+            --specific_code $GITHUB_REPOSITORY \
+            --run_dependency_analysis \
+            --delta_only 
