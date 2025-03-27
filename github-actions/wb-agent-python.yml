@@ -34,7 +34,7 @@ jobs:
 
 # In this example, we omit License Extraction to speed up the scan process.
 # We also use Built-In Env Vars to map Projects and Scans in Workbench to Repos and Branches.
-# Additionally, Identification Reuse is enabled to avoid extra Identification work.
+# Additionally, Delta Scan and Identification Reuse are enabled to reduce scan time and avoid extra Identification work.
       - name: Run Workbench Agent
         run: |
           python fossid-tools/workbench-agent.py \
