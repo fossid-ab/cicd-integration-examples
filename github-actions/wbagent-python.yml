@@ -1,0 +1,49 @@
+## This workflow runs any time code is pushed to a branch.
+## By doing so, Branches always have up-to-date results in Workbench.
+name: Update Branch Scan
+on: push
+      
+jobs:
+  fossid_scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Zip Code; Ignoring File Types
+        run: |
+          zip -r $GITHUB_WORKSPACE/code.zip . -x \
+          '*.tmp' '*.temp' '*.bak' \
+          '*.cache' '*.db' '*.idx' \
+          '*.log' '*.txt' '*.event' \
+          '*.sample' '*.demo' '*.example' \
+          '*.sql' '*.hprof' '*.dmp' \
+          '.gitignore' '.dockerignore' \
+          '.git/*' '.github/*'
+
+      - name: Checkout FossID Workbench Agent Repo
+        uses: actions/checkout@v4
+        with: 
+          repository: fossid-ab/workbench-agent
+          path: fossid-tools
+
+      - name: Prepare Workbench Agent
+        run: pip install -r fossid-tools/requirements.txt
+
+      ## For Feature Branches, we omit License Extraction
+      ## This speeds up the scan for Feature Branches.
+      - name: Run Workbench Agent
+        run: |
+          python fossid-tools/workbench-agent.py \
+            --api_url ${{ secrets.WORKBENCH_URL }} \
+            --api_user ${{ secrets.WORKBENCH_USER }} \
+            --api_token ${{ secrets.WORKBENCH_TOKEN }} \
+            --project_code $GITHUB_REPOSITORY \
+            --scan_code $GITHUB_REPOSITORY/$GITHUB_REF_NAME \
+            --path $GITHUB_WORKSPACE/code.zip \
+            --chunked_upload \
+            --reuse_identifications \
+            --identification_reuse_type specific_project \
+            --specific_code $GITHUB_REPOSITORY \
+            --run_dependency_analysis \
+            --delta_only 
