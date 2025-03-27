@@ -8,8 +8,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
+# The Workbench Agent works best when an archive is provided for analysis.
       - name: Zip Code; Ignoring File Types
         run: |
           zip -r $GITHUB_WORKSPACE/code.zip . -x \
@@ -21,6 +22,7 @@ jobs:
           '.gitignore' '.dockerignore' \
           '.git/*' '.github/*'
 
+# Since we're running with Python, we check out the Repo then install its dependencies.
       - name: Checkout FossID Workbench Agent Repo
         uses: actions/checkout@v4
         with: 
@@ -30,8 +32,9 @@ jobs:
       - name: Prepare Workbench Agent
         run: pip install -r fossid-tools/requirements.txt
 
-      ## For Feature Branches, we omit License Extraction
-      ## This speeds up the scan for Feature Branches.
+# In this example, we omit License Extraction to speed up the scan process.
+# We also use Built-In Env Vars to map Projects and Scans in Workbench to Repos and Branches.
+# Additionally, Identification Reuse is enabled to avoid extra Identification work.
       - name: Run Workbench Agent
         run: |
           python fossid-tools/workbench-agent.py \
