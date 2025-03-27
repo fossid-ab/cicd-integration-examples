@@ -9,7 +9,7 @@ The following examples are available:
 
 # Secrets 
 
-We recommend saving the credentials for the Workbench Agent or Diff Scanner as [Encrypted Secrets[(https://docs.github.com/en/actions/security-guides/encrypted-secrets). 
+We recommend saving the credentials for the Workbench Agent or Diff Scanner as [Encrypted Secrets](https://docs.github.com/en/actions/security-guides/encrypted-secrets). 
 
 # Structuring Projects and Scans 
 
