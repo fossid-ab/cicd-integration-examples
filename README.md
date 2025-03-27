@@ -3,7 +3,7 @@ The purpose of this repo is to share examples of how FossID can be added to your
 There are two tools for which we'll provide examples: The FossID Workbench and the FossID Toolbox.
 
 <h2> FossID Workbench </h2>
-For Workbench, we'll provide examples using the (Workbench Agent)[https://github.com/fossid-ab/workbench-agent].
+For Workbench, we'll provide examples using the [Workbench Agent](https://github.com/fossid-ab/workbench-agent).
 We'll provide examples of using the Python Script directly or running the Workbench Agent container.
 
 Please Note: The CI/CD examples are not complete build pipelines. They are intended to show only how FossID can be added to your own.
