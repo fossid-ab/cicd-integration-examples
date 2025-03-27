@@ -11,10 +11,10 @@ The following examples are available:
 
 We recommend saving the credentials for the Workbench Agent or Diff Scanner as [Encrypted Secrets[(https://docs.github.com/en/actions/security-guides/encrypted-secrets). 
 
-# Project and Scan Naming Strategy
+# Structuring Projects and Scans 
 
-For naming your Projects and Scans, we recommend using GitHub Actions’ Default Environment Variables.
-- Projects can be named using the GITHUB_REPOSITORY variable.
-- Scans under Projects can be named using the GITHUB_HEAD_REF.
+Our sample templates use GitHub's Default Environment Variables for naming your Projects and Scans.
+- Projects can be named using the $GITHUB_REPOSITORY variable.
+- Scans under Projects can be named using the $GITHUB_REPOSITORY/$GITHUB_REF_NAME.
 
 For more information, refer to the [Structuring Scans and Projects](https://fossid.atlassian.net/servicedesk/customer/portal/3/article/372965437) Guide in the Support Wiki.
