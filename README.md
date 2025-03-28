@@ -9,6 +9,8 @@ Please note these examples are not complete pipelines. They are intended to show
 
 For Workbench, we provide examples using the [Workbench Agent](https://github.com/fossid-ab/workbench-agent). There are examples for running the Python Script directly and for running the container.
 
+We also provide examples of using the Workbench API from our [API Sample Scripts](https://github.com/fossid-ab/workbench-api-samples).
+
 
 ### Prerequisites
 
