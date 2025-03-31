@@ -1,0 +1,25 @@
+name: FossID - Policy Check on PR
+
+# This workflow runs on ANY Pull request.
+on: pull_request
+
+jobs:
+  evaluate_fossid_gates:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout FossID Scripts Repo
+        uses: actions/checkout@v4
+        with: 
+          repository: fossid-ab/workbench-api-samples
+
+# This will check the Workbench Project/Scan for the HEAD branch 
+# To alert if there are pending identifications or policy violations identified
+      - name: Evaluate Post Scan Gates
+        run: |
+          python post-scan-gates/post_scan_gates.py \
+          --workbench-url ${{ secrets.WORKBENCH_URL }} \
+          --workbench-user ${{ secrets.WORKBENCH_USER }} \
+          --workbench-token ${{ secrets.WORKBENCH_TOKEN }} \
+          --scan-code $GITHUB_REPOSITORY/$GITHUB_HEAD_REF \
+          --show-files \
+          --policy-check
