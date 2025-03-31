@@ -6,6 +6,7 @@ The following examples are available:
 1. toolbox-diffscan.yml - uses the Toolbox DiffScan to compare two REFs during a Pull Request
 2. wb-agent-python.yml - a workflow that uses the Workbench Agent to scan as code is pushed to branches
 3. wb-agent-container.yml - an implementation of the same Workbench Agent workflow, using the container instead
+4. wb-api-gating.yml - uses the [Post-Scan Gates Sample Script](https://github.com/fossid-ab/workbench-api-samples/tree/main/post-scan-gates) to show a blocking pull request check.
 
 # Secrets 
 
