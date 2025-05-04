@@ -1,0 +1,24 @@
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_TAG'
+
+run-fossid-diffscan:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: always
+    - when: never
+    
+  stage: build
+  image:
+    name: quay.io/fossid/fossid-toolbox:latest
+    entrypoint: [""]
+  tags:
+    - linux
+  script:
+    - fossid
+    -v trace
+    diffscan
+    --fossid-host $FOSSID_HOST
+    --fossid-token $FOSSID_TOKEN
+    --fail-on-any-issues 1
