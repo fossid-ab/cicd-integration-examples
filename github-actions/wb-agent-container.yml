@@ -38,7 +38,7 @@ jobs:
       - name: Run Workbench Agent
         run: |
           docker run -v ${{ github.workspace }}:/tmp \
-                     quay.io/fossid/workbench-agent:0.7.0 \
+                     quay.io/fossid/workbench-agent:0.7.2 \
             --api_url ${{ secrets.WORKBENCH_URL }} \
             --api_user ${{ secrets.WORKBENCH_USER }} \
             --api_token ${{ secrets.WORKBENCH_TOKEN }} \

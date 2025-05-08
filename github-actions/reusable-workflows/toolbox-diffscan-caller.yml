@@ -1,0 +1,19 @@
+name: FossID DiffScan
+
+# This workflow triggers on pull requests to run FossID DiffScan analysis
+on: pull_request
+
+jobs:
+  call-diffscan-workflow:
+    name: FossID DiffScan
+    # Call the reusable workflow
+    uses: ./.github/workflows/reusable-workflows/toolbox-diffscan-called.yml
+    # Pass the required secrets (assumed to be organization-level secrets)
+    secrets:
+      QUAY_USER: ${{ secrets.QUAY_USER }}
+      QUAY_TOKEN: ${{ secrets.QUAY_TOKEN }}
+      KB_URL: ${{ secrets.KB_URL }}
+      KB_TOKEN: ${{ secrets.KB_TOKEN }}
+    # Optional inputs
+    with:
+      fail-on-any-issues: '0' # Set to '1' to fail the pipeline when issues are detected

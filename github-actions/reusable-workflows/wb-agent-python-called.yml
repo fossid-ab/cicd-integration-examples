@@ -1,0 +1,277 @@
+name: FossID Workbench Agent - Reusable Workflow
+
+on:
+  workflow_call:
+    secrets:
+      WORKBENCH_URL:
+        required: true
+      WORKBENCH_USER:
+        required: true
+      WORKBENCH_TOKEN:
+        required: true
+    inputs:
+      # Required parameters
+      project_code:
+        description: 'Name of the project inside Workbench where the scan will be created'
+        required: true
+        type: string
+      scan_code:
+        description: 'The scan code used when creating the scan in Workbench'
+        required: true
+        type: string
+      scan_number_of_tries:
+        description: 'Number of calls to check_status till declaring the scan failed'
+        required: false
+        default: '60'
+        type: string
+      scan_wait_time:
+        description: 'Time interval between calling check_status, in seconds'
+        required: false
+        default: '30'
+        type: string
+      
+      # Optional parameters
+      limit:
+        description: 'Limits CLI results to N most significant matches'
+        required: false
+        default: '10'
+        type: string
+      sensitivity:
+        description: 'Sets snippet sensitivity to a minimum of N lines'
+        required: false
+        default: '10'
+        type: string
+      recursively_extract_archives:
+        description: 'Recursively extract nested archives'
+        required: false
+        default: 'false'
+        type: string
+      jar_file_extraction:
+        description: 'Control default behavior related to extracting jar files'
+        required: false
+        default: 'false'
+        type: string
+      blind_scan:
+        description: 'Call CLI and generate file hashes. Upload hashes and initiate blind scan'
+        required: false
+        default: 'false'
+        type: string
+      run_dependency_analysis:
+        description: 'Initiate dependency analysis after finishing scanning for matches in KB'
+        required: false
+        default: 'false'
+        type: string
+      run_only_dependency_analysis:
+        description: 'Scan only for dependencies, no results from KB'
+        required: false
+        default: 'false'
+        type: string
+      auto_identification_detect_declaration:
+        description: 'Automatically detect license declaration inside files'
+        required: false
+        default: 'false'
+        type: string
+      auto_identification_detect_copyright:
+        description: 'Automatically detect copyright statements inside files'
+        required: false
+        default: 'false'
+        type: string
+      auto_identification_resolve_pending_ids:
+        description: 'Automatically resolve pending identifications'
+        required: false
+        default: 'false'
+        type: string
+      delta_only:
+        description: 'Scan only delta (newly added files from last scan)'
+        required: false
+        default: 'false'
+        type: string
+      reuse_identifications:
+        description: 'Try to use an existing identification'
+        required: false
+        default: 'false'
+        type: string
+      identification_reuse_type:
+        description: 'Based on reuse type last identification found will be used for files with the same hash'
+        required: false
+        default: ''
+        type: string
+      specific_code:
+        description: 'The scan code used for identification reuse'
+        required: false
+        default: ''
+        type: string
+      no_advanced_match_scoring:
+        description: 'Disable advanced match scoring which by default is enabled'
+        required: false
+        default: 'false'
+        type: string
+      match_filtering_threshold:
+        description: 'Minimum length, in characters, of the snippet to be considered valid'
+        required: false
+        default: ''
+        type: string
+      target_path:
+        description: 'The path on the Workbench server where the code to be scanned is stored'
+        required: false
+        default: ''
+        type: string
+      chunked_upload:
+        description: 'For files bigger than 8 MB uploading will be done using chunked transfer'
+        required: false
+        default: 'false'
+        type: string
+      log:
+        description: 'Specify logging level. Allowed values: DEBUG, INFO, WARNING, ERROR'
+        required: false
+        default: 'INFO'
+        type: string
+      path_result:
+        description: 'Save results to specified path'
+        required: false
+        default: ''
+        type: string
+      get_scan_identified_components:
+        description: 'Return the list of identified components instead of licenses'
+        required: false
+        default: 'false'
+        type: string
+      scans_get_policy_warnings_counter:
+        description: 'Return information about policy warnings found in this scan'
+        required: false
+        default: 'false'
+        type: string
+      projects_get_policy_warnings_info:
+        description: 'Return information about policy warnings for project'
+        required: false
+        default: 'false'
+        type: string
+
+jobs:
+  wb-agent-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Zip Code; Ignoring File Types
+        run: |
+          zip -r $GITHUB_WORKSPACE/code.zip . -x \
+          '*.tmp' '*.temp' '*.bak' \
+          '*.cache' '*.db' '*.idx' \
+          '*.log' '*.txt' '*.event' \
+          '*.sample' '*.demo' '*.example' \
+          '*.sql' '*.hprof' '*.dmp' \
+          '.gitignore' '.dockerignore' \
+          '.git/*' '.github/*'
+
+      - name: Checkout FossID Workbench Agent Repo
+        uses: actions/checkout@v4
+        with: 
+          repository: fossid-ab/workbench-agent
+          path: fossid-tools
+
+      - name: Prepare Workbench Agent
+        run: pip install -r fossid-tools/requirements.txt
+
+      - name: Run Workbench Agent
+        run: |
+          COMMAND="python fossid-tools/workbench-agent.py \
+            --api_url ${{ secrets.WORKBENCH_URL }} \
+            --api_user ${{ secrets.WORKBENCH_USER }} \
+            --api_token ${{ secrets.WORKBENCH_TOKEN }} \
+            --project_code ${{ inputs.project_code }} \
+            --scan_code ${{ inputs.scan_code }} \
+            --scan_number_of_tries ${{ inputs.scan_number_of_tries }} \
+            --scan_wait_time ${{ inputs.scan_wait_time }} \
+            --path $GITHUB_WORKSPACE/code.zip \
+            --limit ${{ inputs.limit }} \
+            --sensitivity ${{ inputs.sensitivity }}"
+          
+          # Add optional flags based on inputs
+          if [ "${{ inputs.recursively_extract_archives }}" == "true" ]; then
+            COMMAND="$COMMAND --recursively_extract_archives"
+          fi
+          
+          if [ "${{ inputs.jar_file_extraction }}" == "true" ]; then
+            COMMAND="$COMMAND --jar_file_extraction"
+          fi
+          
+          if [ "${{ inputs.blind_scan }}" == "true" ]; then
+            COMMAND="$COMMAND --blind_scan"
+          fi
+          
+          if [ "${{ inputs.run_dependency_analysis }}" == "true" ]; then
+            COMMAND="$COMMAND --run_dependency_analysis"
+          fi
+          
+          if [ "${{ inputs.run_only_dependency_analysis }}" == "true" ]; then
+            COMMAND="$COMMAND --run_only_dependency_analysis"
+          fi
+          
+          if [ "${{ inputs.auto_identification_detect_declaration }}" == "true" ]; then
+            COMMAND="$COMMAND --auto_identification_detect_declaration"
+          fi
+          
+          if [ "${{ inputs.auto_identification_detect_copyright }}" == "true" ]; then
+            COMMAND="$COMMAND --auto_identification_detect_copyright"
+          fi
+          
+          if [ "${{ inputs.auto_identification_resolve_pending_ids }}" == "true" ]; then
+            COMMAND="$COMMAND --auto_identification_resolve_pending_ids"
+          fi
+          
+          if [ "${{ inputs.delta_only }}" == "true" ]; then
+            COMMAND="$COMMAND --delta_only"
+          fi
+          
+          if [ "${{ inputs.reuse_identifications }}" == "true" ]; then
+            COMMAND="$COMMAND --reuse_identifications"
+          fi
+          
+          if [ "${{ inputs.identification_reuse_type }}" != "" ]; then
+            COMMAND="$COMMAND --identification_reuse_type ${{ inputs.identification_reuse_type }}"
+          fi
+          
+          if [ "${{ inputs.specific_code }}" != "" ]; then
+            COMMAND="$COMMAND --specific_code ${{ inputs.specific_code }}"
+          fi
+          
+          if [ "${{ inputs.no_advanced_match_scoring }}" == "true" ]; then
+            COMMAND="$COMMAND --no_advanced_match_scoring"
+          fi
+          
+          if [ "${{ inputs.match_filtering_threshold }}" != "" ]; then
+            COMMAND="$COMMAND --match_filtering_threshold ${{ inputs.match_filtering_threshold }}"
+          fi
+          
+          if [ "${{ inputs.target_path }}" != "" ]; then
+            COMMAND="$COMMAND --target_path ${{ inputs.target_path }}"
+          fi
+          
+          if [ "${{ inputs.chunked_upload }}" == "true" ]; then
+            COMMAND="$COMMAND --chunked_upload"
+          fi
+          
+          if [ "${{ inputs.log }}" != "" ]; then
+            COMMAND="$COMMAND --log ${{ inputs.log }}"
+          fi
+          
+          if [ "${{ inputs.path_result }}" != "" ]; then
+            COMMAND="$COMMAND --path-result ${{ inputs.path_result }}"
+          fi
+          
+          if [ "${{ inputs.get_scan_identified_components }}" == "true" ]; then
+            COMMAND="$COMMAND --get_scan_identified_components"
+          fi
+          
+          if [ "${{ inputs.scans_get_policy_warnings_counter }}" == "true" ]; then
+            COMMAND="$COMMAND --scans_get_policy_warnings_counter"
+          fi
+          
+          if [ "${{ inputs.projects_get_policy_warnings_info }}" == "true" ]; then
+            COMMAND="$COMMAND --projects_get_policy_warnings_info"
+          fi
+          
+          # Run the constructed command
+          eval $COMMAND

@@ -1,0 +1,30 @@
+name: Update Branch Scan with Workbench Agent
+
+# This workflow runs any time code is pushed to the main branch
+on: 
+  push:
+    branches: [ main ]
+
+jobs:
+  call-wb-agent-workflow:
+    name: FossID Workbench Agent Scan
+    # Call the reusable workflow
+    uses: ./.github/workflows/reusable-workflows/wb-agent-python-called.yml
+    # Pass the required secrets (assumed to be organization-level secrets)
+    secrets:
+      WORKBENCH_URL: ${{ secrets.WORKBENCH_URL }}
+      WORKBENCH_USER: ${{ secrets.WORKBENCH_USER }}
+      WORKBENCH_TOKEN: ${{ secrets.WORKBENCH_TOKEN }}
+    # Pass the required and optional parameters
+    with:
+      # Required parameters
+      project_code: ${{ github.repository }}
+      scan_code: ${{ github.repository }}/${{ github.ref_name }}
+      
+      # Optional parameters - set the ones you want to enable
+      chunked_upload: 'true'
+      reuse_identifications: 'true'
+      identification_reuse_type: 'specific_project'
+      specific_code: ${{ github.repository }}
+      run_dependency_analysis: 'true'
+      delta_only: 'true'

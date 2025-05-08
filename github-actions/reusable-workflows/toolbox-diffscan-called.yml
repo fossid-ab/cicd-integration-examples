@@ -1,0 +1,41 @@
+name: FossID DiffScan - Reusable Workflow
+
+on:
+  workflow_call:
+    secrets:
+      QUAY_USER:
+        required: true
+      QUAY_TOKEN:
+        required: true
+      KB_URL:
+        required: true
+      KB_TOKEN:
+        required: true
+    inputs:
+      fail-on-any-issues:
+        description: 'Set to 1 to fail the pipeline when issues are detected'
+        type: string
+        default: '0'
+        required: false
+
+jobs:
+  run-diffscan:
+    name: Run FossID DiffScan
+    runs-on: ubuntu-latest
+    container:
+      image: quay.io/fossid/fossid-toolbox:latest
+      credentials:
+        username: ${{ secrets.QUAY_USER }}
+        password: ${{ secrets.QUAY_TOKEN }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Run DiffScan
+        run: |
+          fossid \
+          diffscan \
+          --fossid-host ${{ secrets.KB_URL }} \
+          --fossid-token ${{ secrets.KB_TOKEN }} \
+          --github-workflow-errors \
+          --fail-on-any-issues ${{ inputs.fail-on-any-issues }}
