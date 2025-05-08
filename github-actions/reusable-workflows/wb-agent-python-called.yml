@@ -146,6 +146,20 @@ on:
         required: false
         default: 'false'
         type: string
+name: Workbench Agent Scan
+
+on:
+  workflow_call:
+    secrets:
+      WORKBENCH_URL:
+        required: true
+      WORKBENCH_USER:
+        required: true
+      WORKBENCH_TOKEN:
+        required: true
+    inputs:
+      # [inputs as defined before, unchanged]
+      # ... your full list of inputs here ...
 
 jobs:
   wb-agent-scan:
@@ -187,91 +201,46 @@ jobs:
             --path $GITHUB_WORKSPACE/code.zip \
             --limit ${{ inputs.limit }} \
             --sensitivity ${{ inputs.sensitivity }}"
-          
-          # Add optional flags based on inputs
-          if [ "${{ inputs.recursively_extract_archives }}" == "true" ]; then
-            COMMAND="$COMMAND --recursively_extract_archives"
-          fi
-          
-          if [ "${{ inputs.jar_file_extraction }}" == "true" ]; then
-            COMMAND="$COMMAND --jar_file_extraction"
-          fi
-          
-          if [ "${{ inputs.blind_scan }}" == "true" ]; then
-            COMMAND="$COMMAND --blind_scan"
-          fi
-          
-          if [ "${{ inputs.run_dependency_analysis }}" == "true" ]; then
-            COMMAND="$COMMAND --run_dependency_analysis"
-          fi
-          
-          if [ "${{ inputs.run_only_dependency_analysis }}" == "true" ]; then
-            COMMAND="$COMMAND --run_only_dependency_analysis"
-          fi
-          
-          if [ "${{ inputs.auto_identification_detect_declaration }}" == "true" ]; then
-            COMMAND="$COMMAND --auto_identification_detect_declaration"
-          fi
-          
-          if [ "${{ inputs.auto_identification_detect_copyright }}" == "true" ]; then
-            COMMAND="$COMMAND --auto_identification_detect_copyright"
-          fi
-          
-          if [ "${{ inputs.auto_identification_resolve_pending_ids }}" == "true" ]; then
-            COMMAND="$COMMAND --auto_identification_resolve_pending_ids"
-          fi
-          
-          if [ "${{ inputs.delta_only }}" == "true" ]; then
-            COMMAND="$COMMAND --delta_only"
-          fi
-          
-          if [ "${{ inputs.reuse_identifications }}" == "true" ]; then
-            COMMAND="$COMMAND --reuse_identifications"
-          fi
-          
-          if [ "${{ inputs.identification_reuse_type }}" != "" ]; then
-            COMMAND="$COMMAND --identification_reuse_type ${{ inputs.identification_reuse_type }}"
-          fi
-          
-          if [ "${{ inputs.specific_code }}" != "" ]; then
-            COMMAND="$COMMAND --specific_code ${{ inputs.specific_code }}"
-          fi
-          
-          if [ "${{ inputs.no_advanced_match_scoring }}" == "true" ]; then
-            COMMAND="$COMMAND --no_advanced_match_scoring"
-          fi
-          
-          if [ "${{ inputs.match_filtering_threshold }}" != "" ]; then
-            COMMAND="$COMMAND --match_filtering_threshold ${{ inputs.match_filtering_threshold }}"
-          fi
-          
-          if [ "${{ inputs.target_path }}" != "" ]; then
-            COMMAND="$COMMAND --target_path ${{ inputs.target_path }}"
-          fi
-          
-          if [ "${{ inputs.chunked_upload }}" == "true" ]; then
-            COMMAND="$COMMAND --chunked_upload"
-          fi
-          
-          if [ "${{ inputs.log }}" != "" ]; then
-            COMMAND="$COMMAND --log ${{ inputs.log }}"
-          fi
-          
-          if [ "${{ inputs.path_result }}" != "" ]; then
-            COMMAND="$COMMAND --path-result ${{ inputs.path_result }}"
-          fi
-          
-          if [ "${{ inputs.get_scan_identified_components }}" == "true" ]; then
-            COMMAND="$COMMAND --get_scan_identified_components"
-          fi
-          
-          if [ "${{ inputs.scans_get_policy_warnings_counter }}" == "true" ]; then
-            COMMAND="$COMMAND --scans_get_policy_warnings_counter"
-          fi
-          
-          if [ "${{ inputs.projects_get_policy_warnings_info }}" == "true" ]; then
-            COMMAND="$COMMAND --projects_get_policy_warnings_info"
-          fi
-          
+
+          # Boolean flags
+          for flag in \
+            recursively_extract_archives \
+            jar_file_extraction \
+            blind_scan \
+            run_dependency_analysis \
+            run_only_dependency_analysis \
+            auto_identification_detect_declaration \
+            auto_identification_detect_copyright \
+            auto_identification_resolve_pending_ids \
+            delta_only \
+            reuse_identifications \
+            no_advanced_match_scoring \
+            chunked_upload \
+            get_scan_identified_components \
+            scans_get_policy_warnings_counter \
+            projects_get_policy_warnings_info; do
+            if [ "${{ inputs[$flag] }}" == "true" ]; then
+              COMMAND="$COMMAND --$flag"
+            fi
+          done
+
+          # Flags with values
+          declare -A value_flags=(
+            [identification_reuse_type]="${{ inputs.identification_reuse_type }}"
+            [specific_code]="${{ inputs.specific_code }}"
+            [match_filtering_threshold]="${{ inputs.match_filtering_threshold }}"
+            [target_path]="${{ inputs.target_path }}"
+            [log]="${{ inputs.log }}"
+            [path-result]="${{ inputs.path_result }}"
+          )
+
+          for key in "${!value_flags[@]}"; do
+            value="${value_flags[$key]}"
+            if [ -n "$value" ]; then
+              COMMAND="$COMMAND --$key $value"
+            fi
+          done
+
           # Run the constructed command
-          eval $COMMAND
+          eval "$COMMAND"
+
