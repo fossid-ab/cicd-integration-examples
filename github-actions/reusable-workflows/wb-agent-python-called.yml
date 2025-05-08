@@ -19,16 +19,6 @@ on:
         description: 'The scan code used when creating the scan in Workbench'
         required: true
         type: string
-      scan_number_of_tries:
-        description: 'Number of calls to check_status till declaring the scan failed'
-        required: false
-        default: '60'
-        type: string
-      scan_wait_time:
-        description: 'Time interval between calling check_status, in seconds'
-        required: false
-        default: '30'
-        type: string
       
       # Optional parameters
       limit:
@@ -145,6 +135,16 @@ on:
         description: 'Return information about policy warnings for project'
         required: false
         default: 'false'
+        type: string
+      scan_number_of_tries:
+        description: 'Number of calls to check_status till declaring the scan failed'
+        required: false
+        default: '60'
+        type: string
+      scan_wait_time:
+        description: 'Time interval between calling check_status, in seconds'
+        required: false
+        default: '30'
         type: string
 
 jobs:
