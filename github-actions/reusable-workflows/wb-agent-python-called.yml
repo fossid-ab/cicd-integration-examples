@@ -1,4 +1,4 @@
-name: FossID Workbench Agent - Reusable Workflow
+name: FossID Workbench Agent - Reusable Workflow for Scanning a Local Path
 
 on:
   workflow_call:
@@ -176,102 +176,56 @@ jobs:
 
       - name: Run Workbench Agent
         run: |
-          COMMAND="python fossid-tools/workbench-agent.py \
-            --api_url ${{ secrets.WORKBENCH_URL }} \
-            --api_user ${{ secrets.WORKBENCH_USER }} \
-            --api_token ${{ secrets.WORKBENCH_TOKEN }} \
-            --project_code ${{ inputs.project_code }} \
-            --scan_code ${{ inputs.scan_code }} \
-            --scan_number_of_tries ${{ inputs.scan_number_of_tries }} \
-            --scan_wait_time ${{ inputs.scan_wait_time }} \
-            --path $GITHUB_WORKSPACE/code.zip \
-            --limit ${{ inputs.limit }} \
-            --sensitivity ${{ inputs.sensitivity }}"
+          # Build command using arrays for better readability and maintainability
+          cmd=(
+            "python fossid-tools/workbench-agent.py"
+            
+            # Required parameters
+            "--api_url ${{ secrets.WORKBENCH_URL }}"
+            "--api_user ${{ secrets.WORKBENCH_USER }}"
+            "--api_token ${{ secrets.WORKBENCH_TOKEN }}"
+            "--project_code ${{ inputs.project_code }}"
+            "--scan_code ${{ inputs.scan_code }}"
+
+            # Default Scan Target
+            "--path $GITHUB_WORKSPACE/code.zip"
+
+            # File Upload and Extraction Configuration
+            $([[ "${{ inputs.chunked_upload }}" == "true" ]] && echo "--chunked_upload")
+            $([[ "${{ inputs.recursively_extract_archives }}" == "true" ]] && echo "--recursively_extract_archives")
+            $([[ "${{ inputs.jar_file_extraction }}" == "true" ]] && echo "--jar_file_extraction")
+
+            # Scan Configuration Parameters
+            $([[ "${{ inputs.blind_scan }}" == "true" ]] && echo "--blind_scan")
+            $([[ "${{ inputs.run_dependency_analysis }}" == "true" ]] && echo "--run_dependency_analysis")
+            $([[ "${{ inputs.run_only_dependency_analysis }}" == "true" ]] && echo "--run_only_dependency_analysis")
+            $([[ "${{ inputs.auto_identification_detect_declaration }}" == "true" ]] && echo "--auto_identification_detect_declaration")
+            $([[ "${{ inputs.auto_identification_detect_copyright }}" == "true" ]] && echo "--auto_identification_detect_copyright")
+            $([[ "${{ inputs.auto_identification_resolve_pending_ids }}" == "true" ]] && echo "--auto_identification_resolve_pending_ids")
+            $([[ "${{ inputs.delta_only }}" == "true" ]] && echo "--delta_only")
+            $([[ "${{ inputs.no_advanced_match_scoring }}" == "true" ]] && echo "--no_advanced_match_scoring")
+            $([[ "${{ inputs.limit }}" != "" ]] && echo "--limit ${{ inputs.limit }}")
+            $([[ "${{ inputs.sensitivity }}" != "" ]] && echo "--sensitivity ${{ inputs.sensitivity }}")
+            $([[ "${{ inputs.match_filtering_threshold }}" != "" ]] && echo "--match_filtering_threshold ${{ inputs.match_filtering_threshold }}")
+            
+            # Identification Reuse Parameters
+            $([[ "${{ inputs.reuse_identifications }}" == "true" ]] && echo "--reuse_identifications")
+            $([[ "${{ inputs.identification_reuse_type }}" != "" ]] && echo "--identification_reuse_type ${{ inputs.identification_reuse_type }}")
+            $([[ "${{ inputs.specific_code }}" != "" ]] && echo "--specific_code ${{ inputs.specific_code }}")
+
+            # Scan Waiting Parameters
+            $([[ "${{ inputs.scan_number_of_tries }}" != "" ]] && echo "--scan_number_of_tries ${{ inputs.scan_number_of_tries }}")
+            $([[ "${{ inputs.scan_wait_time }}" != "" ]] && echo "--scan_wait_time ${{ inputs.scan_wait_time }}")
           
-          # Add optional flags based on inputs
-          if [ "${{ inputs.recursively_extract_archives }}" == "true" ]; then
-            COMMAND="$COMMAND --recursively_extract_archives"
-          fi
-          
-          if [ "${{ inputs.jar_file_extraction }}" == "true" ]; then
-            COMMAND="$COMMAND --jar_file_extraction"
-          fi
-          
-          if [ "${{ inputs.blind_scan }}" == "true" ]; then
-            COMMAND="$COMMAND --blind_scan"
-          fi
-          
-          if [ "${{ inputs.run_dependency_analysis }}" == "true" ]; then
-            COMMAND="$COMMAND --run_dependency_analysis"
-          fi
-          
-          if [ "${{ inputs.run_only_dependency_analysis }}" == "true" ]; then
-            COMMAND="$COMMAND --run_only_dependency_analysis"
-          fi
-          
-          if [ "${{ inputs.auto_identification_detect_declaration }}" == "true" ]; then
-            COMMAND="$COMMAND --auto_identification_detect_declaration"
-          fi
-          
-          if [ "${{ inputs.auto_identification_detect_copyright }}" == "true" ]; then
-            COMMAND="$COMMAND --auto_identification_detect_copyright"
-          fi
-          
-          if [ "${{ inputs.auto_identification_resolve_pending_ids }}" == "true" ]; then
-            COMMAND="$COMMAND --auto_identification_resolve_pending_ids"
-          fi
-          
-          if [ "${{ inputs.delta_only }}" == "true" ]; then
-            COMMAND="$COMMAND --delta_only"
-          fi
-          
-          if [ "${{ inputs.reuse_identifications }}" == "true" ]; then
-            COMMAND="$COMMAND --reuse_identifications"
-          fi
-          
-          if [ "${{ inputs.identification_reuse_type }}" != "" ]; then
-            COMMAND="$COMMAND --identification_reuse_type ${{ inputs.identification_reuse_type }}"
-          fi
-          
-          if [ "${{ inputs.specific_code }}" != "" ]; then
-            COMMAND="$COMMAND --specific_code ${{ inputs.specific_code }}"
-          fi
-          
-          if [ "${{ inputs.no_advanced_match_scoring }}" == "true" ]; then
-            COMMAND="$COMMAND --no_advanced_match_scoring"
-          fi
-          
-          if [ "${{ inputs.match_filtering_threshold }}" != "" ]; then
-            COMMAND="$COMMAND --match_filtering_threshold ${{ inputs.match_filtering_threshold }}"
-          fi
-          
-          if [ "${{ inputs.target_path }}" != "" ]; then
-            COMMAND="$COMMAND --target_path ${{ inputs.target_path }}"
-          fi
-          
-          if [ "${{ inputs.chunked_upload }}" == "true" ]; then
-            COMMAND="$COMMAND --chunked_upload"
-          fi
-          
-          if [ "${{ inputs.log }}" != "" ]; then
-            COMMAND="$COMMAND --log ${{ inputs.log }}"
-          fi
-          
-          if [ "${{ inputs.path_result }}" != "" ]; then
-            COMMAND="$COMMAND --path-result ${{ inputs.path_result }}"
-          fi
-          
-          if [ "${{ inputs.get_scan_identified_components }}" == "true" ]; then
-            COMMAND="$COMMAND --get_scan_identified_components"
-          fi
-          
-          if [ "${{ inputs.scans_get_policy_warnings_counter }}" == "true" ]; then
-            COMMAND="$COMMAND --scans_get_policy_warnings_counter"
-          fi
-          
-          if [ "${{ inputs.projects_get_policy_warnings_info }}" == "true" ]; then
-            COMMAND="$COMMAND --projects_get_policy_warnings_info"
-          fi
-          
-          # Run the constructed command
-          eval $COMMAND
+            # Results Parameters
+            $([[ "${{ inputs.get_scan_identified_components }}" == "true" ]] && echo "--get_scan_identified_components")
+            $([[ "${{ inputs.scans_get_policy_warnings_counter }}" == "true" ]] && echo "--scans_get_policy_warnings_counter")
+            $([[ "${{ inputs.projects_get_policy_warnings_info }}" == "true" ]] && echo "--projects_get_policy_warnings_info")
+            $([[ "${{ inputs.path_result }}" != "" ]] && echo "--path-result ${{ inputs.path_result }}")
+
+            # Logging Parameters
+            $([[ "${{ inputs.log }}" != "" ]] && echo "--log ${{ inputs.log }}")
+          )
+
+          # Execute command by joining array elements with spaces
+          eval "${cmd[@]}"
