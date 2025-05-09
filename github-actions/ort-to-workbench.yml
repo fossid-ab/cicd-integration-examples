@@ -1,0 +1,39 @@
+# This workflow will run ORT's Analyzer then upload the analyzer-result.json it produces into Workbench.
+name: Upload ORT Results to Workbench 
+
+on: workflow_dispatch
+
+jobs:
+  run-ort-upload-results:
+    runs-on: ubuntu-latest
+    env:
+      WORKBENCH_URL: ${{ secrets.WORKBENCH_URL }}
+      WORKBENCH_USER: ${{ secrets.WORKBENCH_USER }}
+      WORKBENCH_TOKEN: ${{ secrets.WORKBENCH_TOKEN }}
+    steps:
+    - name: Run ORT GitHub Action
+      uses: oss-review-toolkit/ort-ci-github-action@v1
+      with:
+        allow-dynamic-versions: 'true'
+        run: >
+          analyzer
+          
+    - name: Confirm the Analyzer JSON was created
+      run: ls -la /home/runner/.ort/ort-results
+      
+    - name: Upload ORT Results into Workbench
+      run: |
+        docker run -v "/home/runner/.ort/ort-results":"/tmp/ort-results" \
+        ghcr.io/tomgonzo/workbench-cli:latest \
+        --api-url ${{ env.WORKBENCH_URL }} \
+        --api-user ${{ env.WORKBENCH_USER }} \
+        --api-token ${{ env.WORKBENCH_TOKEN }} \
+        import-da \
+        --path "/tmp/ort-results/analyzer-result.json" \
+        --project-name $GITHUB_REPOSITORY \
+        --scan-name $GITHUB_REF \
+        --show-dependencies
+
+        
+      
+      
