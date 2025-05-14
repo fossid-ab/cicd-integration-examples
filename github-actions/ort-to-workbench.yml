@@ -20,7 +20,9 @@ jobs:
           
     - name: Confirm the Analyzer JSON was created
       run: ls -la /home/runner/.ort/ort-results
-      
+
+
+      # Please Note: The Workbench CLI Image used here is not officially supported by FossID.
     - name: Upload ORT Results into Workbench
       run: |
         docker run -v "/home/runner/.ort/ort-results":"/tmp/ort-results" \
