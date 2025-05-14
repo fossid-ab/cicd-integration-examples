@@ -21,6 +21,21 @@ jobs:
     - name: Confirm the Analyzer JSON was created
       run: ls -la /home/runner/.ort/ort-results
 
+    - name: Checkout FossID Scripts Repo
+      uses: actions/checkout@v4
+      with: 
+        repository: fossid-ab/workbench-api-samples
+
+    - name: Upload ORT Results to Workbench
+      run: |
+        python import-da/import-da.py \
+        --api-url ${{ secrets.WORKBENCH_URL }} \
+        --api-user ${{ secrets.WORKBENCH_USER }} \
+        --api-token ${{ secrets.WORKBENCH_TOKEN }} \
+        --scan-code $GITHUB_REPOSITORY/$GITHUB_HEAD_REF \
+        --file "/home/runner/.ort/ort-results/analyzer-result.json"
+
+
 
       # Please Note: The Workbench CLI Image used here is not officially supported by FossID.
     - name: Upload ORT Results into Workbench
