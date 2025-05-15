@@ -1,6 +1,12 @@
 name: FossID DiffScan - PR Check using Workbench Defined Project Policies
 
-on: pull_request
+on:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      dummy:
+        description: "Just hit Run workflow to test"
+        required: false
 
 jobs:
   run-diffscan:
@@ -11,15 +17,12 @@ jobs:
         username: ${{ secrets.QUAY_USER }}
         password: ${{ secrets.QUAY_TOKEN }}
 
-    # Define some shared env vars via GitHub context
     env:
       WORKBENCH_API_URL: ${{ secrets.WORKBENCH_API_URL }}
       WORKBENCH_USERNAME: ${{ secrets.WORKBENCH_USERNAME }}
       WORKBENCH_KEY:      ${{ secrets.WORKBENCH_KEY }}
-      # use repo name (owner/name) as project_code
       PROJECT_CODE:       ${{ github.repository }}
-      # include branch name for scan-code if you want
-      SCAN_CODE:          ${{ github.repository }}/{{ github.head_ref }}
+      SCAN_CODE:          ${{ github.repository }}_${{ github.head_ref }}
 
       FOSSID_HOST:  ${{ secrets.FOSSID_HOST }}
       FOSSID_TOKEN: ${{ secrets.FOSSID_TOKEN }}
@@ -30,20 +33,17 @@ jobs:
 
       - name: Download license policy
         run: |
-          curl -sS -X POST "$WORKBENCH_API_URL" \
-            -H "Content-Type: application/json" \
-            --data @- \
-            -o .fossidpolicy <<EOF
-          {
-            "group": "download",
-            "action": "licenses_policy_info",
-            "data": {
-              "username":     "$WORKBENCH_USERNAME",
-              "key":          "$WORKBENCH_KEY",
-              "project_code": "$PROJECT_CODE"
-            }
-          }
-          EOF
+          cat <<EOF > .fossidpolicy
+{
+  "group": "download",
+  "action": "licenses_policy_info",
+  "data": {
+    "username":     "$WORKBENCH_USERNAME",
+    "key":          "$WORKBENCH_KEY",
+    "project_code": "$PROJECT_CODE"
+  }
+}
+EOF
 
       - name: Run FossID DiffScan
         run: |
