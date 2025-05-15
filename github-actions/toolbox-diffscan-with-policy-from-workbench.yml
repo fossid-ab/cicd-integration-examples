@@ -34,16 +34,16 @@ jobs:
       - name: Download license policy
         run: |
           cat <<EOF > .fossidpolicy
-{
-  "group": "download",
-  "action": "licenses_policy_info",
-  "data": {
-    "username":     "$WORKBENCH_USERNAME",
-    "key":          "$WORKBENCH_KEY",
-    "project_code": "$PROJECT_CODE"
-  }
-}
-EOF
+          {
+            "group": "download",
+            "action": "licenses_policy_info",
+            "data": {
+              "username":     "$WORKBENCH_USERNAME",
+              "key":          "$WORKBENCH_KEY",
+              "project_code": "$PROJECT_CODE"
+            }
+          }
+          EOF
 
       - name: Run FossID DiffScan
         run: |
