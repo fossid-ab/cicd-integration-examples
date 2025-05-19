@@ -7,7 +7,7 @@ The following examples are available:
 2. wb-agent-python.yml - a workflow that uses the Workbench Agent to scan as code is pushed to branches
 3. wb-agent-container.yml - an implementation of the same Workbench Agent workflow, using the container instead
 4. wb-api-gating.yml - uses the [Post-Scan Gates Sample Script](https://github.com/fossid-ab/workbench-api-samples/tree/main/post-scan-gates) to show a blocking pull request check.
-5. ort-to-workbench.yml - uses the prototype (unsupported) [Workbench CLI](https://github.com/tomgonzo/workbench-cli) to upload results from the ORT GitHub Action into Workbench for viewing and reporting.
+5. ort-to-workbench.yml - shows how you can run the ORT GitHub Action then use the [DA Upload Sample Script](https://github.com/fossid-ab/workbench-api-samples/tree/main/import-da) to upload its results into Workbench for viewing and reporting.
 
 # Secrets 
 
