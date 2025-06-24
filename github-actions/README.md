@@ -8,6 +8,7 @@ The following examples are available:
 3. wb-agent-container.yml - an implementation of the same Workbench Agent workflow, using the container instead
 4. wb-api-gating.yml - uses the [Post-Scan Gates Sample Script](https://github.com/fossid-ab/workbench-api-samples/tree/main/post-scan-gates) to show a blocking pull request check.
 5. ort-to-workbench.yml - shows how you can run the ORT GitHub Action then use the [DA Upload Sample Script](https://github.com/fossid-ab/workbench-api-samples/tree/main/import-da) to upload its results into Workbench for viewing and reporting.
+6. agent-diff.yml - performs differential scanning on pull requests by analyzing only the files that have changed between the base and head branches, using the Workbench Agent with delta_only mode and post-scan gate evaluation.
 
 # Secrets 
 

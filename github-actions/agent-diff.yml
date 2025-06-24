@@ -1,0 +1,118 @@
+name: Build and Test - Differential Scan
+
+on: [pull_request]
+jobs:
+  run_differential_scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Target Repo
+        uses: actions/checkout@v4
+        with:
+          path: target-repo
+          fetch-depth: 0 # Fetch all history for all branches and tags
+
+      - name: Fetch Base and Head Branches
+        working-directory: target-repo
+        run: |
+          git fetch origin ${{ github.base_ref }}:${{ github.base_ref }}
+          git fetch origin ${{ github.head_ref }}:${{ github.head_ref }}
+          git branch -a
+
+      - name: Create Archive of Changed Files
+        working-directory: target-repo
+        id: create-diff-archive
+        run: |
+          # Get the list of changed files and create archive
+          CHANGED_FILES=$(git diff --name-only --diff-filter=d ${{ github.base_ref }} ${{ github.head_ref }})
+          
+          if [ -z "$CHANGED_FILES" ]; then
+            echo "✅ No changed files found - creating empty marker"
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "Changed files:"
+            echo "$CHANGED_FILES"
+            echo "$CHANGED_FILES" | zip -@ ../diff-archive.zip
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "Archive created: ../diff-archive.zip"
+            ls -la ../diff-archive.zip
+          fi
+
+      - name: Create results directory
+        if: steps.create-diff-archive.outputs.has_changes == 'true'
+        run: mkdir -p results
+
+      - name: Login to Docker Registry
+        if: steps.create-diff-archive.outputs.has_changes == 'true'
+        uses: docker/login-action@v2
+        with:
+          registry: quay.io/fossid
+          username: ${{ secrets.QUAY_USER }}
+          password: ${{ secrets.QUAY_TOKEN }}
+
+      - name: Pull Docker Image
+        if: steps.create-diff-archive.outputs.has_changes == 'true'
+        run: docker pull quay.io/fossid/workbench-agent:0.7.1
+
+      - name: Extract and list files to be analyzed
+        if: steps.create-diff-archive.outputs.has_changes == 'true'
+        run: |
+          mkdir -p analyzed_code
+          unzip -q diff-archive.zip -d analyzed_code
+          echo "Files extracted from archive:"
+          find analyzed_code -type f | head -20
+          echo "Total files: $(find analyzed_code -type f | wc -l)"
+
+      - name: Run Docker Container
+        if: steps.create-diff-archive.outputs.has_changes == 'true'
+        run: |
+          EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64) &&
+          MY_RESULTS_FILE="${{ github.workspace }}/results/wb_result.json" &&
+          docker run -v "${{ github.workspace }}/analyzed_code":"/tmp/analyzed_code" \
+                     -v "${{ github.workspace }}/results":"/tmp/results" \
+                     quay.io/fossid/workbench-agent:0.7.1 \
+            --api_url ${{ secrets.WORKBENCH_URL }} \
+            --api_user ${{ secrets.WORKBENCH_USER }} \
+            --api_token ${{ secrets.WORKBENCH_TOKEN }} \
+            --project_code $GITHUB_REPOSITORY \
+            --scan_code Diff-${GITHUB_REPOSITORY//\//-}-$GITHUB_HEAD_REF \
+            --blind_scan \
+            --path "/tmp/analyzed_code" \
+            --limit 1 \
+            --auto_identification_detect_declaration \
+            --auto_identification_detect_copyright \
+            --auto_identification_resolve_pending_ids \
+            --delta_only \
+            --path-result '/tmp/results/wb_result.json'  &&
+          echo "GITHUB_FOSSID_RESULTS<<$EOF" >> "$GITHUB_ENV" &&
+          cat "$MY_RESULTS_FILE" >> "$GITHUB_ENV" &&
+          echo $'\n' >> "$GITHUB_ENV" &&
+          echo "$EOF" >> "$GITHUB_ENV"
+
+      - name: Display results from env variable
+        if: steps.create-diff-archive.outputs.has_changes == 'true'
+        run: echo "${{ fromJson(env.GITHUB_FOSSID_RESULTS) }}"
+
+      - name: No changes to scan
+        if: steps.create-diff-archive.outputs.has_changes == 'false'
+        run: echo "No file changes detected in this pull request. Skipping scan." 
+
+  evaluate_fossid_gates:
+    needs: run_differential_scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout FossID Scripts Repo
+        uses: actions/checkout@v4
+        with: 
+          repository: fossid-ab/workbench-api-samples
+
+# This will check the Workbench Project/Scan for the HEAD branch 
+# To alert if there are pending identifications or policy violations identified
+      - name: Evaluate Post Scan Gates
+        run: |
+          python post-scan-gates/post_scan_gates.py \
+          --workbench-url ${{ secrets.WORKBENCH_URL }} \
+          --workbench-user ${{ secrets.WORKBENCH_USER }} \
+          --workbench-token ${{ secrets.WORKBENCH_TOKEN }} \
+          --scan-code Diff-${GITHUB_REPOSITORY//\//-}-$GITHUB_HEAD_REF \
+          --show-files \
+          --policy-check 
