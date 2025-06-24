@@ -1,4 +1,4 @@
-name: Build and Test - Differential Scan
+name: Workbench Agent - Differential Blind Scan
 
 on: [pull_request]
 jobs:
@@ -53,6 +53,8 @@ jobs:
         if: steps.create-diff-archive.outputs.has_changes == 'true'
         run: docker pull quay.io/fossid/workbench-agent:0.7.1
 
+# When using Blind Scan, a path to a directory must be provided instead of the ZIP itself. 
+# This step is unnecessary when not using Blind Scan.
       - name: Extract and list files to be analyzed
         if: steps.create-diff-archive.outputs.has_changes == 'true'
         run: |
