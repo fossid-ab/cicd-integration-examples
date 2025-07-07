@@ -1,0 +1,58 @@
+name: FossID DiffScan - PR Check using Workbench Defined Project Policies
+
+on:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      dummy:
+        description: "Just hit Run workflow to test"
+        required: false
+
+jobs:
+  run-diffscan:
+    runs-on: ubuntu-latest
+    container:
+      image: quay.io/fossid/fossid-toolbox:latest
+      credentials:
+        username: ${{ secrets.QUAY_USER }}
+        password: ${{ secrets.QUAY_TOKEN }}
+
+    env:
+      WORKBENCH_API_URL: ${{ secrets.WORKBENCH_API_URL }}
+      WORKBENCH_USERNAME: ${{ secrets.WORKBENCH_USERNAME }}
+      WORKBENCH_KEY:      ${{ secrets.WORKBENCH_KEY }}
+      PROJECT_CODE:       ${{ github.repository }}
+      SCAN_CODE:          ${{ github.repository }}_${{ github.head_ref }}
+
+      FOSSID_HOST:  ${{ secrets.FOSSID_HOST }}
+      FOSSID_TOKEN: ${{ secrets.FOSSID_TOKEN }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download license policy
+        run: |
+          cat <<EOF > .fossidpolicy
+          {
+            "group": "download",
+            "action": "licenses_policy_info",
+            "data": {
+              "username":     "$WORKBENCH_USERNAME",
+              "key":          "$WORKBENCH_KEY",
+              "project_code": "$PROJECT_CODE"
+            }
+          }
+          EOF
+
+      - name: Run FossID DiffScan
+        run: |
+          fossid diffscan \
+            --fossid-host $FOSSID_HOST \
+            --fossid-token $FOSSID_TOKEN \
+            --policy-file .fossidpolicy \
+            --github-workflow-errors \
+            --fail \
+            --repository-path . \
+            --compare-ref ${{ github.head_ref }} \
+            --base-ref    ${{ github.event.pull_request.base.ref }}
