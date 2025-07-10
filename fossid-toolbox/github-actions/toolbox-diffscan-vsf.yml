@@ -1,4 +1,4 @@
-name: FossID DiffScan - VSF Check
+name: Toolbox DiffScan - VSF Check
 
 # DiffScan is intended to run during Pull Requests
 # This is necessary in order to compare the BASE and HEAD refs.
@@ -6,7 +6,7 @@ on: pull_request
 
 jobs:
   run-diffscan:
-    name: Run FossID DiffScan
+    name: Run Toolbox DiffScan
     runs-on: ubuntu-latest
     container:
       image: quay.io/fossid/fossid-toolbox:latest
