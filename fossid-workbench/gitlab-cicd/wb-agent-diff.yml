@@ -1,0 +1,126 @@
+# Workbench Agent - Differential Scan for Merge Requests
+# This workflow runs on merge requests to scan only the files that have changed
+
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+
+stages:
+  - scan
+  - evaluate
+
+variables:
+  # Set these variables in your GitLab project settings
+  # WORKBENCH_URL: "https://your-workbench-instance.com"
+  # WORKBENCH_USER: "your-username"
+  # WORKBENCH_TOKEN: "your-api-token"
+  # QUAY_USER: "your-quay-username"
+  # QUAY_TOKEN: "your-quay-token"
+  
+  # Project and scan naming for differential scans
+  PROJECT_CODE: $CI_PROJECT_PATH
+  SCAN_CODE: "Diff-$CI_PROJECT_PATH-$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME"
+
+run_differential_scan:
+  stage: scan
+  image:
+    name: quay.io/fossid/workbench-agent:0.7.2
+    entrypoint: [""]
+  
+  variables:
+    GIT_STRATEGY: clone
+    GIT_DEPTH: 0  # Fetch all history for all branches and tags
+  
+  before_script:
+    - mkdir -p results
+    - |
+      # Fetch base and head branches
+      git fetch origin $CI_MERGE_REQUEST_TARGET_BRANCH_NAME
+      git fetch origin $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME
+      
+      # Get the list of changed files and create archive
+      CHANGED_FILES=$(git diff --name-only --diff-filter=d origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME origin/$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME)
+      
+      if [ -z "$CHANGED_FILES" ]; then
+        echo "✅ No changed files found"
+        echo "HAS_CHANGES=false" >> build.env
+      else
+        echo "Changed files:"
+        echo "$CHANGED_FILES"
+        echo "$CHANGED_FILES" | zip -@ diff-archive.zip
+        echo "HAS_CHANGES=true" >> build.env
+        echo "Archive created: diff-archive.zip"
+        ls -la diff-archive.zip
+      fi
+  
+  script:
+    - |
+      if [ "$HAS_CHANGES" = "true" ]; then
+        # Run Workbench Agent for differential scan
+        workbench-agent \
+          --api_url $WORKBENCH_URL \
+          --api_user $WORKBENCH_USER \
+          --api_token $WORKBENCH_TOKEN \
+          --project_code $PROJECT_CODE \
+          --scan_code $SCAN_CODE \
+          --path diff-archive.zip \
+          --limit 1 \
+          --auto_identification_detect_declaration \
+          --auto_identification_detect_copyright \
+          --auto_identification_resolve_pending_ids \
+          --path-result results/wb_result.json
+      else
+        echo "No file changes detected in this merge request. Skipping scan."
+      fi
+  
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: always
+  
+  artifacts:
+    when: always
+    expire_in: 1 week
+    paths:
+      - diff-archive.zip
+      - results/
+    reports:
+      dotenv: build.env
+  
+  tags:
+    - linux
+
+evaluate_fossid_gates:
+  stage: evaluate
+  image: python:3.9
+  
+  dependencies:
+    - run_differential_scan
+  
+  before_script:
+    - pip install requests
+    - git clone https://github.com/fossid-ab/workbench-api-samples.git
+  
+  script:
+    - |
+      if [ "$HAS_CHANGES" = "true" ]; then
+        # Check the Workbench Project/Scan for the differential scan
+        # to alert if there are pending identifications or policy violations
+        python workbench-api-samples/post-scan-gates/post_scan_gates.py \
+          --workbench-url $WORKBENCH_URL \
+          --workbench-user $WORKBENCH_USER \
+          --workbench-token $WORKBENCH_TOKEN \
+          --scan-code $SCAN_CODE \
+          --show-files \
+          --policy-check
+      else
+        echo "No scan was performed, skipping policy check."
+      fi
+  
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: always
+  
+  allow_failure: false
+  
+  tags:
+    - linux 

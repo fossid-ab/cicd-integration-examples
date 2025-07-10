@@ -9,16 +9,14 @@ run-fossid-diffscan:
       when: always
     - when: never
     
-  stage: build
+  stage: scan
   image:
     name: quay.io/fossid/fossid-toolbox:latest
     entrypoint: [""]
-  tags:
-    - linux
   script:
-    - fossid
-    -v trace
-    diffscan
-    --fossid-host $FOSSID_HOST
-    --fossid-token $FOSSID_TOKEN
-    --fail-on-any-issues 1
+    - |
+      fossid \
+      diffscan \
+      --fossid-host $FOSSID_HOST \
+      --fossid-token $FOSSID_TOKEN \
+      --fail 1
