@@ -4,7 +4,7 @@ These workflow files show how to add FossID Toolbox to a Pull Request workflow. 
 
 The following examples are available:
 
-1. `toolbox-diffscan.yml` - uses the Toolbox DiffScan to 
+1. `toolbox-diffscan.yml` - uses the Toolbox DiffScan to check for license issues
 2. `toolbox-diffscan-vsf.yml` - uses Toolbox DiffScan to check for Vulnerable Code Snippets
 
 ## Reusing Workflows
