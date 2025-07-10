@@ -1,10 +1,10 @@
 # About this Repo
-This repo contains reference templates to accelerate integrating FossID Workbench and FossID Toolbox into CI/CD pipelines. This is an ongoing effort by the Customer Success Team to have ready-made examples for various ecosystems. 
+This repo contains reference templates to accelerate integrating FossID Workbench and FossID Toolbox into CI/CD pipelines. This is an ongoing effort to have ready-made examples for various ecosystems. 
 
 Please note these examples are not complete pipelines. They are intended to show only how FossID can be added to your own.
 
 ## About the Repo Structure
-The examples are divided into folders for FossID Toolbox and FossID Workbench as these are separate tools serving different use cases.
+The examples are separated into folders for FossID Toolbox and FossID Workbench as these are separate tools serving different use cases.
 
 ### FossID Workbench
 Workbench is a Web Application that provides thorough auditing and report generation capabilities. 
