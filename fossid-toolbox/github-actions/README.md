@@ -13,4 +13,4 @@ The `reusable-workflows` folder has workflows showing how you can implement this
 
 ## Required Secrets 
 
-We recommend saving the secrets for Toolbox as [Encrypted Secrets](https://docs.github.com/en/actions/security-guides/encrypted-secrets) then adding them to the `env` for the workflow - this is illustrated in the examples.
+We recommend saving the secrets for Toolbox as [Encrypted Secrets](https://docs.github.com/en/actions/security-guides/encrypted-secrets) - this is illustrated in the examples.
