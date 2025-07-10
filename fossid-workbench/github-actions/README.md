@@ -15,10 +15,10 @@ These workflows show how to maintain up-to-date reports for a Git Branch by re-s
 - `wb-agent-python.yml` - runs the Workbench Agent using Python
 - `wb-agent-container.yml` - runs the Workbench Agent container
 
-The first time these workflows run, every file will be scanned. As additional changes are pushed, only the delta is analyzed.
+The first time these workflows run on a branch, every file will be scanned. As additional changes are pushed, only the delta is analyzed.
 
 ### Scanning File Diffs in Pull Requests
-These workflows perform differential scans by fetching the HEAD and BASE branches for a Pull Request and running Git commands to isolate only the files that changed before submitting them for analysis.
+These workflows perform differential scans by fetching the HEAD and BASE then isolating only the files that changed before submitting them for analysis.
 
 - `wb-agent-diff.yml` - creates a ZIP of changed files and scans them by uploading code to Workbench.
 - `wb-agent-blind-diff.yml` - scans the changed files "blind" - without uploading code to the Workbench.

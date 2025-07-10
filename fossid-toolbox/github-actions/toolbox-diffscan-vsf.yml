@@ -22,6 +22,6 @@ jobs:
           diffscan \
           --fossid-host ${{ secrets.KB_URL }} \
           --fossid-token ${{ secrets.KB_TOKEN }} \
-          --vsf-mode all \
+          --vsf-mode new \
           --license-mode off \
           --github-workflow-errors
