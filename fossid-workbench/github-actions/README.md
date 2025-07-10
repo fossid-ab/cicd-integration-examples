@@ -1,6 +1,6 @@
 # GitHub Actions Examples!
 
-These templates show you how to integrate Workbench into a GitHub Actions workflow. Most of these use the [Workbench Agent](https://github.com/fossid-ab/workbench-agent) for easy integration.
+These templates show how to add Workbench to a GitHub Actions workflow. 
 
 ## About these Examples 
 These templates use Environment Variables for mapping repositories and branches to Workbench Projects and Scans. 
