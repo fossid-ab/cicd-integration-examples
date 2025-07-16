@@ -23,3 +23,4 @@ jobs:
           --fossid-host ${{ secrets.KB_URL }} \
           --fossid-token ${{ secrets.KB_TOKEN }} \
           --github-workflow-errors
+          --fail-on-any-issues 1 #required to fail workflow
