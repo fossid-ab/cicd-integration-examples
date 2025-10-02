@@ -1,0 +1,33 @@
+# Toolbox DiffScan - VSF (Vulnerable Code Snippets) Check
+# DiffScan is intended to run during Merge Requests to scan for vulnerable code snippets
+
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+
+stages:
+  - scan
+
+variables:
+  # Set these variables in your GitLab project settings
+  # FOSSID_HOST: "https://your-fossid-kb.com"
+  # FOSSID_TOKEN: "your-fossid-token"
+  # QUAY_USER: "your-quay-username" (optional)
+  # QUAY_TOKEN: "your-quay-token" (optional)
+
+run-toolbox-diffscan-vsf:
+  stage: scan
+  image:
+    name: quay.io/fossid/fossid-toolbox:latest
+    entrypoint: [""]
+  
+  script:
+    # Run FossID Toolbox DiffScan in VSF mode
+    # This scans for vulnerable code snippets while disabling license scanning
+    - |
+      fossid \
+        diffscan \
+        --fossid-host $FOSSID_HOST \
+        --fossid-token $FOSSID_TOKEN \
+        --vsf-mode new \
+        --license-mode off

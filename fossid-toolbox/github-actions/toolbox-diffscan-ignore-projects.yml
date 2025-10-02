@@ -1,0 +1,37 @@
+name: FossID DiffScan - Stateless PR Check
+
+# DiffScan is intended to run during Pull Requests
+# This is necessary in order to compare the BASE and HEAD refs.
+on: pull_request
+
+jobs:
+  run-diffscan:
+    name: Run FossID DiffScan
+    runs-on: ubuntu-latest
+    container:
+      image: quay.io/fossid/fossid-toolbox:latest
+      credentials:
+        username: ${{ secrets.QUAY_USER }}
+        password: ${{ secrets.QUAY_TOKEN }}
+
+    steps:
+      - name: Checkout Ignore Project List
+        uses: actions/checkout@v5
+        with:
+          repository: fossid-ab/cicd-integration-examples #use the repo where your ignore project list lives
+          sparse-checkout: |
+            fossid-toolbox/sample-ignore-project-list
+          path: /tmp/sample-ignore-project-list
+          sparse-checkout-cone-mode: false
+
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Run DiffScan
+        run: |
+          fossid \
+          diffscan \
+          --fossid-host ${{ secrets.KB_URL }} \
+          --fossid-token ${{ secrets.KB_TOKEN }} \
+          --github-workflow-errors \
+          --ignore-projects /tmp/sample-ignore-project-list

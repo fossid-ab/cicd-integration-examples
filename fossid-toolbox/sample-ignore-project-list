@@ -1,0 +1,5 @@
+## Exclude results from this Repo
+github.com/fossid-ab/cicd-integration-examples
+
+## Exclude Repos from the FossID GitHub Org
+github.com/fossid-ab
