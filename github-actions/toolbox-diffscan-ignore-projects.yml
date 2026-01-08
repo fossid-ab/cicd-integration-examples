@@ -1,4 +1,4 @@
-name: FossID DiffScan - Stateless PR Check
+name: FossID DiffScan - Stateless PR Check with Ignore Projects
 
 # DiffScan is intended to run during Pull Requests
 # This is necessary in order to compare the BASE and HEAD refs.
@@ -20,7 +20,7 @@ jobs:
         with:
           repository: fossid-ab/cicd-integration-examples #use the repo where your ignore project list lives
           sparse-checkout: |
-            fossid-toolbox/sample-ignore-project-list
+            extras/sample-ignore-project-list
           path: /tmp/sample-ignore-project-list
           sparse-checkout-cone-mode: false
 

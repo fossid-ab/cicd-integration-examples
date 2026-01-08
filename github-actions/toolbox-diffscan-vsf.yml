@@ -1,4 +1,4 @@
-name: FossID DiffScan - Stateless PR Check
+name: Toolbox DiffScan - VSF Check
 
 # DiffScan is intended to run during Pull Requests
 # This is necessary in order to compare the BASE and HEAD refs.
@@ -6,21 +6,24 @@ on: pull_request
 
 jobs:
   run-diffscan:
-    name: Run FossID DiffScan
+    name: Run Toolbox DiffScan
     runs-on: ubuntu-latest
     container:
       image: quay.io/fossid/fossid-toolbox:latest
       credentials:
         username: ${{ secrets.QUAY_USER }}
         password: ${{ secrets.QUAY_TOKEN }}
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        
       - name: Run DiffScan
         run: |
           fossid \
           diffscan \
           --fossid-host ${{ secrets.KB_URL }} \
           --fossid-token ${{ secrets.KB_TOKEN }} \
+          --vsf-mode new \
+          --license-mode off \
           --github-workflow-errors
-          --fail-on-any-issues 1 #required to fail workflow

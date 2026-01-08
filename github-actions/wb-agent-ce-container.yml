@@ -1,0 +1,31 @@
+## This workflow runs any time code is pushed to a branch.
+## By doing so, Branches always have up-to-date results in Workbench.
+name: Scan a Branch on Push
+on: push
+      
+jobs:
+  fossid_scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+# Analysis with Workbench works best when an archive is provided.
+      - name: Zip Code
+        run: |
+          zip -r $GITHUB_WORKSPACE/code.zip .
+
+      - name: Scan with Workbench Agent CE
+        run: |
+          docker run --rm \
+          -v $GITHUB_WORKSPACE/code.zip:/scan_target/code.zip \
+          ghcr.io/fossid-ab/workbench-agent-ce:latest \
+          scan \
+          --api-url ${{ secrets.WORKBENCH_URL }} \
+          --api-user ${{ secrets.WORKBENCH_USER }} \
+          --api-token ${{ secrets.WORKBENCH_TOKEN }} \
+          --project-name $GITHUB_REPOSITORY \
+          --scan-name $GITHUB_REF_NAME \
+          --path /scan_target/code.zip
+          --autoid-file-licenses \
+          --autoid-file-copyrights
