@@ -1,4 +1,4 @@
-# FossID Toolbox: GitHub Actions Examples!
+# FossID GitHub Actions Examples!
 
 These workflow files show how to add FossID Toolbox to a Pull Request workflow. In them, the `diffscan` command is used to compare the HEAD and BASE refs to highlight newly introduced open source licenses or vulnerable code snippets. 
 
