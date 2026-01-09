@@ -12,10 +12,14 @@ For Toolbox, the following examples are provided:
 
 # FossID Workbench
 For Workbench, the following examples are provided:
-1. `wb-agent-ce-container.yml` - scans an entire branch every time code is code is pushed to it
+1. `wb-agent-ce-scan-gate-report.yml` - on push to a branch, scan the branch, check compliance gates, download reports
 2. `wb-agent-ce-diffscan.yml` - an example of how you can scan only the files changed in a PR
 3. `wb-agent-python.yml` - an example that runs the Workbench Agent as a Python script instead of a container
 4. `wb-agent-ce-import-ort-results.yml` - runs ORT then uploads the results to Workbench for reporting
+
+# Combo Workflow
+You can also use both for more complex workflows! For example:
+1. `toolbox-workbench-pr-diffscan.yml` - scans with Toolbox first, then with Workbench if Toolbox found something
 
 ## Reusing Workflows
 
