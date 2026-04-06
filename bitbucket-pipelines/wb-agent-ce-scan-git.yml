@@ -1,0 +1,47 @@
+# This is an example Bitbucket pipeline using Workbench Agent CE.
+# For an officially supported solution, use the Workbench Agent instead.
+
+image: atlassian/default-image:3
+
+# Since this job clones from Workbench; no need to clone to the Pipelines worker.
+clone:
+  enabled: false
+
+pipelines:
+  default:
+    - step:
+        name: 'Scan Git Repo'
+        script:
+          - |
+            docker run ghcr.io/fossid-ab/workbench-agent-ce:latest \
+            scan-git \
+            --api-url $WORKBENCH_URL \
+            --api-user $WORKBENCH_USER \
+            --api-token $WORKBENCH_TOKEN \
+            --project-name $BITBUCKET_REPO_FULL_NAME \
+            --scan-name $BITBUCKET_BRANCH \
+            --git-url $BITBUCKET_GIT_HTTP_ORIGIN \
+            --git-branch $BITBUCKET_BRANCH \
+            --git-depth 1 \
+            --reuse-project-ids $BITBUCKET_REPO_FULL_NAME \
+            --run-dependency-analysis \
+            --autoid-file-licenses \
+            --autoid-file-copyrights
+        services: 
+          - docker
+
+    - step:
+        name: 'Evaluate Gates'
+        script:
+          - |
+            docker run ghcr.io/fossid-ab/workbench-agent-ce:latest \
+            evaluate-gates \
+            --api-url $WORKBENCH_URL \
+            --api-user $WORKBENCH_USER \
+            --api-token $WORKBENCH_TOKEN \
+            --project-name $BITBUCKET_REPO_FULL_NAME \
+            --scan-name $BITBUCKET_BRANCH \
+            --fail-on-pending \
+            --fail-on-policy
+        services: 
+          - docker

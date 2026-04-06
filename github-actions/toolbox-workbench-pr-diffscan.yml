@@ -1,0 +1,97 @@
+## This workflow runs when a PR is opened for the Develop Branch.
+name: FossID - Scan PR Diff
+
+on: pull_request
+
+jobs:
+  toolbox-diffscan:
+    runs-on: ubuntu-latest
+    name: Run Toolbox DiffScan
+    env:
+      QUAY_USER: ${{ secrets.QUAY_USER }}
+      QUAY_TOKEN: ${{ secrets.QUAY_TOKEN }}
+      KB_URL: ${{ secrets.KB_URL }}
+      KB_TOKEN: ${{ secrets.KB_TOKEN }}
+    container:
+      image: quay.io/fossid/fossid-toolbox:latest
+      credentials:
+        username: ${{ env.QUAY_USER }}
+        password: ${{ env.QUAY_TOKEN }}
+    outputs:
+      scan-result: ${{ steps.diffscan.outcome }}
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+        
+      - name: Run Toolbox DiffScan
+        id: diffscan
+        continue-on-error: true
+        run: |
+          fossid \
+            diffscan \
+            --fossid-host ${{ env.KB_URL }} \
+            --fossid-token ${{ env.KB_TOKEN }} \
+            --github-workflow-errors \
+            --fail-on-any-issues 1
+
+  workbench-diffscan:
+    name: Run Workbench DiffScan
+    runs-on: ubuntu-latest
+    needs: stateless-diffscan
+    if: needs.stateless-diffscan.outputs.scan-result == 'failure'
+    env:
+      WORKBENCH_URL: ${{ secrets.WORKBENCH_URL }}
+      WORKBENCH_USER: ${{ secrets.WORKBENCH_USER }}
+      WORKBENCH_TOKEN: ${{ secrets.WORKBENCH_TOKEN }}
+
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+        with:
+          path: target-repo
+          fetch-depth: 0 # Fetch all history for all branches and tags
+
+      - name: Fetch Base and Head Branches
+        working-directory: target-repo
+        run: |
+          git fetch origin ${{ github.base_ref }}:${{ github.base_ref }}
+          git fetch origin ${{ github.head_ref }}:${{ github.head_ref }}
+          git branch -a
+
+      - name: Create Archive of Changed Files
+        working-directory: target-repo
+        run: |
+          # Get the list of changed files and create archive
+          CHANGED_FILES=$(git diff --name-only --diff-filter=d ${{ github.base_ref }} ${{ github.head_ref }})
+          echo "$CHANGED_FILES" | zip -@ ../diff-archive.zip
+          echo "Archive created: ../diff-archive.zip"
+      
+      - name: Scan Files Changed by PR
+        run: |
+          docker run --rm \
+            -v $GITHUB_WORKSPACE/diff-archive.zip:/scan_target/diff-archive.zip:ro \
+            ghcr.io/fossid-ab/workbench-agent-ce:latest \
+            scan \
+            --api-url ${{ env.WORKBENCH_URL }} \
+            --api-user ${{ env.WORKBENCH_USER }} \
+            --api-token ${{ env.WORKBENCH_TOKEN }} \
+            --project-name $GITHUB_REPOSITORY \
+            --scan-name DiffOnly-$GITHUB_HEAD_REF \
+            --path /scan_target/diff-archive.zip \
+            --reuse-project-ids $GITHUB_REPOSITORY \
+            --autoid-file-licenses \
+            --autoid-file-copyrights
+
+    
+      - name: Evaluate Gates
+        run: |
+          docker run --rm \
+            ghcr.io/fossid-ab/workbench-agent-ce:latest \
+            evaluate-gates \
+            --api-url ${{ env.WORKBENCH_URL }} \
+            --api-user ${{ env.WORKBENCH_USER }} \
+            --api-token ${{ env.WORKBENCH_TOKEN }} \
+            --project-name $GITHUB_REPOSITORY \
+            --scan-name DiffOnly-$GITHUB_HEAD_REF \
+            --fail-on-pending \
+            --fail-on-policy
