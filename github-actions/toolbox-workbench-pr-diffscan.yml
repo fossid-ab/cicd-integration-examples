@@ -81,7 +81,6 @@ jobs:
             --reuse-project-ids $GITHUB_REPOSITORY \
             --autoid-file-licenses \
             --autoid-file-copyrights
-
     
       - name: Evaluate Gates
         run: |
