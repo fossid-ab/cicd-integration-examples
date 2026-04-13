@@ -74,3 +74,18 @@ jobs:
           --scan-name Diff-$GITHUB_HEAD_REF \
           --fail-on-pending \
           --fail-on-policy
+
+  delete_scan:
+    needs: evaluate_gates
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clean Up the Scan
+        run: |
+          docker run --rm \
+          ghcr.io/fossid-ab/workbench-agent-ce:latest \
+          delete-scan \
+          --api-url ${{ secrets.WORKBENCH_URL }} \
+          --api-user ${{ secrets.WORKBENCH_USER }} \
+          --api-token ${{ secrets.WORKBENCH_TOKEN }} \
+          --project-name $GITHUB_REPOSITORY \
+          --scan-name Diff-$GITHUB_HEAD_REF
