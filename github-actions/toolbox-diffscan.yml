@@ -22,7 +22,7 @@ jobs:
         run: |
           fossid \
           diffscan \
-          --fossid-host ${{ secrets.KB_URL }} \
-          --fossid-token ${{ secrets.KB_TOKEN }} \
+          --host ${{ secrets.KB_URL }} \
+          --token ${{ secrets.KB_TOKEN }} \
           --github-workflow-errors
           --fail-on-any-issues 1 #required to fail workflow
