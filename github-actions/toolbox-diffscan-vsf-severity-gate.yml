@@ -1,0 +1,107 @@
+# Fails a Pull Request that introduces a file matching a known vulnerability,
+# with the threshold set by CVSS severity.
+#
+# `toolbox-diffscan-vsf.yml` shows the basic VSF check, which fails on *any*
+# vulnerable file. This example goes one step further and gates on severity.
+#
+# DiffScan reports which CVEs a diff introduces, but its JSON carries only
+# cve_id / cve_url per finding -- no severity -- so it cannot express "fail on
+# HIGH and above" on its own. The `vuln` command resolves those ids to full NVD
+# records, and the gate script applies the threshold. Findings below the
+# threshold are still recorded as PR warnings.
+name: Toolbox DiffScan - VSF Severity Gate
+
+# DiffScan is intended to run during Pull Requests
+# This is necessary in order to compare the BASE and HEAD refs.
+on:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      min_severity:
+        description: 'Lowest severity that fails the build (NONE|LOW|MEDIUM|HIGH|CRITICAL)'
+        required: false
+        default: 'HIGH'
+
+env:
+  TOOLBOX_IMAGE: quay.io/fossid/fossid-toolbox:latest
+  # Set to NONE to fail on any vulnerability, regardless of severity.
+  MIN_SEVERITY: ${{ github.event.inputs.min_severity || 'HIGH' }}
+
+jobs:
+  vsf-severity-gate:
+    name: Gate on vulnerability severity
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          # DiffScan needs both refs present locally. Ref autodetection does not
+          # work under `docker run` (it cannot inspect the job environment), so
+          # the refs are passed explicitly below and full history is required.
+          fetch-depth: 0
+
+      - name: Login to Quay Registry
+        uses: docker/login-action@v2
+        with:
+          registry: quay.io
+          username: ${{ secrets.QUAY_USER }}
+          password: ${{ secrets.QUAY_TOKEN }}
+
+      # The Toolbox runs via `docker run` rather than as a job-level `container:`
+      # so that Node stays available on the runner for the gate step.
+      - name: Run DiffScan (VSF only, JSON output)
+        env:
+          FOSSID_HOST: ${{ secrets.KB_URL }}
+          FOSSID_TOKEN: ${{ secrets.KB_TOKEN }}
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}:/src" -w /src \
+            -e FOSSID_HOST -e FOSSID_TOKEN \
+            "$TOOLBOX_IMAGE" \
+            -v info \
+            diffscan \
+            --base-ref "origin/${{ github.base_ref }}" \
+            --compare-ref "${{ github.event.pull_request.head.sha }}" \
+            --vsf-mode all \
+            --license-mode off \
+            --format json \
+            > vsf-report.json
+
+      # Resolving severity is a second call, so skip it when the diff is clean.
+      - name: Resolve CVE severities
+        env:
+          FOSSID_HOST: ${{ secrets.KB_URL }}
+          FOSSID_TOKEN: ${{ secrets.KB_TOKEN }}
+        run: |
+          node github-actions/scripts/vuln-severity-gate.mjs list-cves \
+            --report vsf-report.json > cves.txt
+
+          if [ ! -s cves.txt ]; then
+            echo "No CVEs introduced by this diff; skipping vuln lookup."
+            exit 0
+          fi
+
+          echo "Resolving $(wc -l < cves.txt) CVE(s):"
+          cat cves.txt
+
+          docker run --rm \
+            -e FOSSID_HOST -e FOSSID_TOKEN \
+            "$TOOLBOX_IMAGE" \
+            vuln $(tr '\n' ' ' < cves.txt) \
+            > vuln.json
+
+      - name: Gate on severity
+        run: |
+          node github-actions/scripts/vuln-severity-gate.mjs gate \
+            --report vsf-report.json \
+            --vulns vuln.json \
+            --min-severity "$MIN_SEVERITY"
+
+      - name: Upload VSF report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vsf-report-${{ github.run_id }}
+          path: |
+            vsf-report.json
+            vuln.json
