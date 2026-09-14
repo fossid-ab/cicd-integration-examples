@@ -47,6 +47,21 @@ function readVsfIssues(path) {
   return JSON.parse(readFileSync(path, "utf8")).vsf_issues ?? [];
 }
 
+// A finding carries the lines it matched under local_file.highlight.blocks, with a
+// zero-based line offset and a run length. One finding can match in several places,
+// so this returns every range rather than only the first. An empty result means the
+// scanner reported no highlight, and the annotation falls back to file level.
+function matchedRanges(localFile) {
+  return (localFile?.highlight?.blocks ?? [])
+    .filter((b) => b?.lines)
+    .map((b) => ({ start: b.lines.offset + 1, end: b.lines.offset + b.lines.length }));
+}
+
+function formatRanges(ranges) {
+  if (ranges.length === 0) return "";
+  return ranges.map((r) => (r.start === r.end ? `${r.start}` : `${r.start}-${r.end}`)).join(", ");
+}
+
 // CVSS sits in different places depending on the age of the NVD record. Prefer v3 and
 // fall back to v2, where the severity band lives one level up from the scores.
 function extractSeverity(nvd) {
@@ -69,13 +84,14 @@ function renderSummary(findings, args, blocking) {
     "",
     `${findings.length} vulnerable file match(es), ${blocking.size} blocking.`,
     "",
-    "| | CVE | Severity | CVSS | File |",
-    "| --- | --- | --- | --- | --- |",
+    "| | CVE | Severity | CVSS | File | Lines |",
+    "| --- | --- | --- | --- | --- | --- |",
   ];
   for (const f of findings) {
     const mark = blocking.has(f) ? "❌" : "⚠️";
+    const where = formatRanges(f.ranges) || "-";
     lines.push(
-      `| ${mark} | [${f.cveId}](${f.cveUrl}) | ${f.severity ?? "unknown"} | ${f.score ?? "-"} | \`${f.path}\` |`,
+      `| ${mark} | [${f.cveId}](${f.cveUrl}) | ${f.severity ?? "unknown"} | ${f.score ?? "-"} | \`${f.path}\` | ${where} |`,
     );
   }
   return lines.join("\n");
@@ -109,6 +125,7 @@ function gate(args) {
       cveId: issue.cve_id,
       cveUrl: issue.cve_url,
       path: issue.local_file?.path ?? "(unknown)",
+      ranges: matchedRanges(issue.local_file),
       severity,
       score,
     };
@@ -124,11 +141,21 @@ function gate(args) {
   );
 
   for (const f of findings) {
-    // ::error / ::warning annotate the file inline in the PR's Files tab.
+    // ::error / ::warning annotate the file inline in the PR's Files tab. Anchoring to
+    // the matched line range is what makes the annotation actionable — a file-level
+    // annotation on a 6000-line file says nothing about where the problem is.
     const level = blocking.has(f) ? "error" : "warning";
     const sev = f.severity ?? "unknown severity";
     const score = f.score === null ? "" : `, CVSS ${f.score}`;
-    console.log(`::${level} file=${f.path}::${f.cveId} (${sev}${score}) - ${f.cveUrl}`);
+    const message = `${f.cveId} (${sev}${score}) - ${f.cveUrl}`;
+
+    if (f.ranges.length === 0) {
+      console.log(`::${level} file=${f.path}::${message}`);
+      continue;
+    }
+    for (const r of f.ranges) {
+      console.log(`::${level} file=${f.path},line=${r.start},endLine=${r.end}::${message}`);
+    }
   }
 
   if (process.env.GITHUB_STEP_SUMMARY) {
