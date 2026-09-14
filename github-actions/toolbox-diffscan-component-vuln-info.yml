@@ -1,0 +1,145 @@
+# License gate, followed by an informational report on whether the components the
+# PR introduces have known CVEs.
+#
+# The two halves answer different questions and are deliberately weighted differently:
+#
+#   License check  - gates. Fails the PR on a license issue, as before.
+#   Component CVEs - informational only. A component-level CVE may affect a part of
+#                    the component this diff never touches, and diffscan reports the
+#                    *oldest* matching version, so this is a lead to investigate
+#                    rather than confirmed exposure. It never fails the build.
+#
+# For a gate on vulnerabilities, use toolbox-diffscan-vsf-severity-gate.yml
+# instead: VSF matches the diff against known-vulnerable code directly, which is
+# the precise signal.
+name: Toolbox DiffScan - License Check + Component Vulnerability Info
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+env:
+  TOOLBOX_IMAGE: quay.io/fossid/fossid-toolbox:latest
+
+jobs:
+  license-and-component-info:
+    name: License check and component vulnerability info
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          # Ref autodetection does not work under `docker run`, so both refs are
+          # passed explicitly below and full history is required.
+          fetch-depth: 0
+
+      - name: Login to Quay Registry
+        uses: docker/login-action@v2
+        with:
+          registry: quay.io
+          username: ${{ secrets.QUAY_USER }}
+          password: ${{ secrets.QUAY_TOKEN }}
+
+      # The toolbox runs via `docker run` rather than a job-level `container:` so
+      # that Node stays available on the runner for the reporting steps.
+      - name: Run DiffScan (license, JSON output)
+        env:
+          FOSSID_HOST: ${{ secrets.KB_URL }}
+          FOSSID_TOKEN: ${{ secrets.KB_TOKEN }}
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}:/src" -w /src \
+            -e FOSSID_HOST -e FOSSID_TOKEN \
+            "$TOOLBOX_IMAGE" \
+            -v info \
+            diffscan \
+            --base-ref "origin/${{ github.base_ref }}" \
+            --compare-ref "${{ github.event.pull_request.head.sha }}" \
+            --license-mode new \
+            --vsf-mode off \
+            --format json \
+            > license-report.json
+
+      - name: License check
+        id: license-check
+        run: |
+          COUNT=$(node -e "
+            const r = require('./license-report.json');
+            const issues = r.license_issues || [];
+            for (const i of issues) {
+              const c = i.component || {};
+              console.error(\`::error file=\${i.local_file?.path}::License issue in \${c.author}/\${c.artifact}@\${c.version}\`);
+            }
+            console.log(issues.length);
+          ")
+          echo "Found $COUNT license issue(s)."
+          [ "$COUNT" -eq 0 ]
+
+      # Everything below is informational and runs even when the license gate above
+      # failed — a failing license check is exactly when the component context is
+      # most useful to have in the same run.
+      - name: Look up introduced components
+        if: always()
+        env:
+          FOSSID_HOST: ${{ secrets.KB_URL }}
+          FOSSID_TOKEN: ${{ secrets.KB_TOKEN }}
+        run: |
+          node github-actions/scripts/component-vuln-report.mjs list-purls \
+            --report license-report.json > purls.txt
+
+          if [ ! -s purls.txt ]; then
+            echo "No components with a purl were introduced; nothing to look up."
+            exit 0
+          fi
+
+          echo "Looking up $(wc -l < purls.txt) component(s):"
+          cat purls.txt
+
+          # --bulk returns a single document keyed by input id, rather than one
+          # concatenated document per component.
+          docker run --rm \
+            -e FOSSID_HOST -e FOSSID_TOKEN \
+            "$TOOLBOX_IMAGE" \
+            component --bulk $(tr '\n' ' ' < purls.txt) \
+            > components.json
+
+      - name: Resolve CVE severities
+        if: always()
+        env:
+          FOSSID_HOST: ${{ secrets.KB_URL }}
+          FOSSID_TOKEN: ${{ secrets.KB_TOKEN }}
+        run: |
+          [ -f components.json ] || { echo "No component data; skipping."; exit 0; }
+
+          node github-actions/scripts/component-vuln-report.mjs list-cves \
+            --components components.json > component-cves.txt
+
+          if [ ! -s component-cves.txt ]; then
+            echo "None of the introduced components have known CVEs."
+            exit 0
+          fi
+
+          echo "Resolving $(wc -l < component-cves.txt) CVE(s)."
+          docker run --rm \
+            -e FOSSID_HOST -e FOSSID_TOKEN \
+            "$TOOLBOX_IMAGE" \
+            vuln $(tr '\n' ' ' < component-cves.txt) \
+            > component-vuln.json
+
+      - name: Component vulnerability report
+        if: always()
+        run: |
+          node github-actions/scripts/component-vuln-report.mjs report \
+            --report license-report.json \
+            --components components.json \
+            --vulns component-vuln.json
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: license-component-report-${{ github.run_id }}
+          path: |
+            license-report.json
+            components.json
+            component-vuln.json
