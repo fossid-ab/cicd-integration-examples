@@ -9,6 +9,7 @@ For Toolbox, the following examples are provided:
 1. `toolbox-diffscan.yml` - uses the Toolbox DiffScan to check for license issues
 2. `toolbox-diffscan-vsf.yml` - uses Toolbox DiffScan to check for Vulnerable Code Snippets
 3. `toolbox-diffscan-ignore-projects.yml` - uses Toolbox DiffScan with an Ignore Projects List to exclude results from specified repos
+4. `toolbox-diffscan-component-vuln-info.yml` - runs the license check, then reports (without gating) whether the components the PR introduces have known CVEs
 
 # FossID Workbench
 For Workbench, the following examples are provided:
