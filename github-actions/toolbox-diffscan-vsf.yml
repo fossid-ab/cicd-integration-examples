@@ -22,8 +22,8 @@ jobs:
         run: |
           fossid \
           diffscan \
-          --fossid-host ${{ secrets.KB_URL }} \
-          --fossid-token ${{ secrets.KB_TOKEN }} \
+          --host ${{ secrets.KB_URL }} \
+          --token ${{ secrets.KB_TOKEN }} \
           --vsf-mode new \
           --license-mode off \
-          --github-workflow-errors
+          --format github

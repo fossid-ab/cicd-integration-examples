@@ -29,10 +29,10 @@ jobs:
         run: |
           fossid \
             diffscan \
-            --fossid-host ${{ env.KB_URL }} \
-            --fossid-token ${{ env.KB_TOKEN }} \
-            --github-workflow-errors \
-            --fail-on-any-issues 1
+            --host ${{ env.KB_URL }} \
+            --token ${{ env.KB_TOKEN }} \
+            --format github \
+            --fail
 
   workbench-diffscan:
     name: Run Workbench DiffScan

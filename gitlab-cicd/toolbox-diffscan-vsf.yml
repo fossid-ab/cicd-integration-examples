@@ -27,7 +27,7 @@ run-toolbox-diffscan-vsf:
     - |
       fossid \
         diffscan \
-        --fossid-host $FOSSID_HOST \
-        --fossid-token $FOSSID_TOKEN \
+        --host $FOSSID_HOST \
+        --token $FOSSID_TOKEN \
         --vsf-mode new \
         --license-mode off

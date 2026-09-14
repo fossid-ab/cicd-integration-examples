@@ -31,7 +31,7 @@ jobs:
         run: |
           fossid \
           diffscan \
-          --fossid-host ${{ secrets.KB_URL }} \
-          --fossid-token ${{ secrets.KB_TOKEN }} \
-          --github-workflow-errors \
+          --host ${{ secrets.KB_URL }} \
+          --token ${{ secrets.KB_TOKEN }} \
+          --format github \
           --ignore-projects /tmp/sample-ignore-project-list

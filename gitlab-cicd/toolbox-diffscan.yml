@@ -17,6 +17,6 @@ run-fossid-diffscan:
     - |
       fossid \
       diffscan \
-      --fossid-host $FOSSID_HOST \
-      --fossid-token $FOSSID_TOKEN \
-      --fail 1
+      --host $FOSSID_HOST \
+      --token $FOSSID_TOKEN \
+      --fail

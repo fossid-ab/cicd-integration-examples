@@ -33,9 +33,16 @@ jobs:
       
       - name: Run DiffScan
         run: |
+          # --fail is a boolean flag, so the 0/1 input is translated here rather
+          # than passed through. The input name is kept for callers' benefit.
+          FAIL_FLAG=""
+          if [ "${{ inputs.fail-on-any-issues }}" = "1" ]; then
+            FAIL_FLAG="--fail"
+          fi
+
           fossid \
           diffscan \
-          --fossid-host ${{ secrets.KB_URL }} \
-          --fossid-token ${{ secrets.KB_TOKEN }} \
-          --github-workflow-errors \
-          --fail-on-any-issues ${{ inputs.fail-on-any-issues }}
+          --host ${{ secrets.KB_URL }} \
+          --token ${{ secrets.KB_TOKEN }} \
+          --format github \
+          $FAIL_FLAG
