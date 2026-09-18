@@ -130,7 +130,7 @@ def body(issue):
     return "\n\n".join(parts)
 
 
-def summary(unplaced):
+def summary(unplaced, workbench_url=""):
     """One merge-request comment for the findings no position could hold."""
     rows = ["**FossID findings not anchored inline**", "",
             "| Severity | File | Lines | Finding |", "| --- | --- | --- | --- |"]
@@ -143,6 +143,10 @@ def summary(unplaced):
         rows.append("| {} | `{}` | {} | {} |".format(
             issue.get("severity", "-"), path, lines,
             (issue.get("description") or "").replace("|", "\\|")))
+    # Inline threads carry this inside each finding's own body; the summary
+    # has no finding body to inherit it from, so it is added once here.
+    if workbench_url:
+        rows += ["", "**Action needed**: Workbench Scan: {}".format(workbench_url)]
     rows += ["", "These sit on unchanged lines, in files this merge request "
                  "does not touch, or past a limit. " + MARKER.format("summary")]
     return "\n".join(rows)
@@ -169,6 +173,12 @@ def main():
                              "limit). The rest go to the summary comment.")
     parser.add_argument("--no-summary", dest="summary", action="store_false",
                         help="drop unplaceable findings instead of listing them")
+    parser.add_argument("--workbench-url", default="", metavar="URL",
+                        help="browser-facing Workbench Scan URL, added to the "
+                             "summary comment as the action needed. Inline "
+                             "threads already carry it when the report was "
+                             "built with fossid-codequality.py --workbench-url, "
+                             "since a thread renders the finding body verbatim.")
     parser.add_argument("--strict", action="store_true",
                         help="exit 1 if any finding could not be anchored")
     parser.add_argument("--dry-run", action="store_true",
@@ -187,15 +197,15 @@ def main():
         else sys.stdin.read()
     issues = json.loads(text) if text.strip() else []
     if not isinstance(issues, list):
-        log("fossid-mr-notes: ERROR - expected a Code Quality array")
+        log("toolbox-mr-notes: ERROR - expected a Code Quality array")
         return 2
     if not issues:
-        log("fossid-mr-notes: no findings, nothing to post")
+        log("toolbox-mr-notes: no findings, nothing to post")
         return 0
 
     status, mr = call(args, "GET", "")
     if status != 200 or not isinstance(mr, dict) or not mr.get("diff_refs"):
-        log("fossid-mr-notes: ERROR - cannot read MR !{}: {} {}".format(
+        log("toolbox-mr-notes: ERROR - cannot read MR !{}: {} {}".format(
             args.mr, status, str(mr)[:200]))
         return 2
     refs = mr["diff_refs"]
@@ -209,7 +219,7 @@ def main():
             for note in thread.get("notes") or []:
                 seen.update(MARKER_RE.findall(note.get("body") or ""))
     if seen:
-        log("fossid-mr-notes: {} finding(s) already on this MR".format(
+        log("toolbox-mr-notes: {} finding(s) already on this MR".format(
             len(seen - {"summary"})))
 
     posted = skipped = 0
@@ -246,15 +256,15 @@ def main():
         if args.dry_run:
             log("  would post a summary for {} finding(s)".format(len(unplaced)))
         elif "summary" in seen:
-            log("fossid-mr-notes: summary comment already present, not reposting")
+            log("toolbox-mr-notes: summary comment already present, not reposting")
         else:
             status, response = call(args, "POST", "/notes",
-                                    {"body": summary(unplaced)})
+                                    {"body": summary(unplaced, args.workbench_url)})
             if status != 201:
-                log("fossid-mr-notes: summary failed: {} {}".format(
+                log("toolbox-mr-notes: summary failed: {} {}".format(
                     status, str(response)[:160]))
 
-    log("fossid-mr-notes: {}{} thread(s), {} already present, {} in the "
+    log("toolbox-mr-notes: {}{} thread(s), {} already present, {} in the "
         "summary".format("would post " if args.dry_run else "posted ",
                          posted, skipped, len(unplaced)))
     return 1 if unplaced and args.strict else 0

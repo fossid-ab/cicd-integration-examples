@@ -210,7 +210,7 @@ def blank_group():
 
 
 def convert(document, expand=False, cap=200, severity=DEFAULT_SEVERITY,
-            comment="", cve=False, cve_severity=None):
+            comment="", cve=False, cve_severity=None, workbench_url=""):
     """Build Code Quality issues from the `license_issues` of a scan.
 
     Findings sharing a file and line range collapse into one, because the same
@@ -275,6 +275,12 @@ def convert(document, expand=False, cap=200, severity=DEFAULT_SEVERITY,
             body.append("**Upstream**: {}".format(upstream[0]))
         # Always present, so downstream tooling can rely on the field existing.
         body.append("**Comment**: {}".format(comment or "-"))
+        # Closing call to action. The inline finding says what was found;
+        # this says where to go and resolve it. Omitted entirely when no
+        # review scan was opened, rather than rendered as an empty link.
+        if workbench_url:
+            body.append("**Action needed**: Workbench Scan: {}".format(
+                workbench_url))
 
         emit(issues, {
             "type": "issue",
@@ -289,7 +295,7 @@ def convert(document, expand=False, cap=200, severity=DEFAULT_SEVERITY,
 
 
 WRONG_FORMAT = (
-    "fossid-codequality: ERROR - input is not `diffscan --format json` output.\n"
+    "toolbox-codequality: ERROR - input is not `diffscan --format json` output.\n"
     "  Re-run the scan with --format json (requires toolbox 1.7+).\n"
     "  --format human-readable clips each finding to 20 source lines, and\n"
     "  --format github carries anchor lines without ranges; neither is accepted."
@@ -353,6 +359,13 @@ def main():
     parser.add_argument("--comment", default="",
                         help="free-text note appended to every finding, for "
                              "whatever your process needs to say.")
+    parser.add_argument("--workbench-url", default="", metavar="URL",
+                        help="browser-facing Workbench Scan URL for the "
+                             "review scan this MR opened, added to every "
+                             "finding as the action needed. The finding "
+                             "says what was found; this says where it gets "
+                             "audited. Empty omits the field, which is the "
+                             "normal case when no review scan was opened.")
     parser.add_argument("--annotate", choices=["match", "lines"], default="match",
                         help="'match' (default) emits one finding per match, "
                              "carrying its full line range. GitLab draws the "
@@ -373,7 +386,7 @@ def main():
     # Escalation reads vsf_issues, which only --cve does. Say so rather than
     # letting a set flag quietly do nothing.
     if args.cve_severity and not args.cve:
-        log("fossid-codequality: --cve-severity ignored without --cve; every "
+        log("toolbox-codequality: --cve-severity ignored without --cve; every "
             "finding keeps '{}'".format(args.severity))
         args.cve_severity = None
 
@@ -386,7 +399,7 @@ def main():
     # An empty scan is a success with nothing to say, not a format error.
     if not text.strip():
         issues = []
-        log("fossid-codequality: empty input, no issues")
+        log("toolbox-codequality: empty input, no issues")
     else:
         document = load_document(text)
         if document is None:
@@ -394,15 +407,16 @@ def main():
         issues = convert(document, expand=args.annotate == "lines",
                          cap=args.max_annotated_lines, severity=args.severity,
                          comment=args.comment, cve=args.cve,
-                         cve_severity=args.cve_severity)
-        log("fossid-codequality: read {} license issue(s)".format(
+                         cve_severity=args.cve_severity,
+                         workbench_url=args.workbench_url)
+        log("toolbox-codequality: read {} license issue(s)".format(
             len(document.get("license_issues") or [])))
         # Only a hint for a mismatched setup: the scan paid for vulnerability
         # data that the report was not told to use. Silent in the normal case,
         # where --vsf-mode is off and there is nothing to ignore.
         ignored = len(document.get("vsf_issues") or [])
         if ignored and not args.cve:
-            log("fossid-codequality: scan produced {} vsf issue(s); pass --cve "
+            log("toolbox-codequality: scan produced {} vsf issue(s); pass --cve "
                 "to note them on findings, or set --vsf-mode off".format(ignored))
 
     issues.sort(key=lambda i: (i["location"]["path"],
@@ -420,7 +434,7 @@ def main():
         counts[item["severity"]] = counts.get(item["severity"], 0) + 1
     summary = ", ".join("{} {}".format(counts[s], s)
                         for s in SEVERITY_ORDER if s in counts)
-    log("fossid-codequality: {} finding(s){} - {:,} bytes".format(
+    log("toolbox-codequality: {} finding(s){} - {:,} bytes".format(
         len(issues), " ({})".format(summary) if summary else "", len(payload)))
 
     if args.fail_on:
@@ -428,7 +442,7 @@ def main():
         failing = [i for i in issues
                    if SEVERITY_ORDER.index(i["severity"]) >= threshold]
         if failing:
-            log("fossid-codequality: failing, {} finding(s) at or above "
+            log("toolbox-codequality: failing, {} finding(s) at or above "
                 "'{}'".format(len(failing), args.fail_on))
             return 1
     return 0

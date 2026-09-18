@@ -1,0 +1,104 @@
+# FossID Code Quality Creation Runner
+#
+# Turns diffscan JSON into a GitLab Code Quality report. A pure converter: it
+# reads a file, writes a file, and makes no network calls, so it needs no
+# credentials and can run on any image with Python 3.
+#
+#   include:
+#     - local: ci/fossid-code-quality.gitlab-ci.yml
+#
+# Input   $FOSSID_RAW     `fossid diffscan --format json` output
+# Output  $FOSSID_REPORT  a Code Quality report, published two ways:
+#                           - the MR widget, as a `reports: codequality:` artifact
+#                           - inline in Changes, from a pipeline artifact GitLab
+#                             derives from it after the pipeline completes
+#
+# Getting the input: the gitlab-diff-scan template writes exactly this file, so
+# `needs: [toolbox-diffscan]` picks it up. Any producer of the same JSON works.
+#
+# See README.md, including the part about needing a pipeline on the default
+# branch before anything renders at all.
+
+# Declared for standalone use; an including pipeline's `stages` wins.
+stages:
+  - scan
+  - report
+
+variables:
+  FOSSID_RAW: "fossid-diffscan.json"
+  FOSSID_REPORT: "gl-code-quality-report.json"
+
+  # Free-text note added to every finding, for whatever your process needs to
+  # say -- a ticket queue, a policy name, who to ask.
+  FOSSID_COMMENT: ""
+
+  # One severity for every license finding: info | minor | major | critical |
+  # blocker. Nothing is ranked by license here -- the scan's .fossidpolicy
+  # already decided what is worth reporting.
+  FOSSID_SEVERITY: "major"
+
+  # The exception. Set it and a finding whose lines carry a known CVE is
+  # reported at this severity instead of FOSSID_SEVERITY -- a graded fact about
+  # the code rather than a policy call. Needs FOSSID_CVE on, since that is what
+  # reads vsf_issues. Empty keeps every finding at the one flat severity.
+  FOSSID_CVE_SEVERITY: ""
+
+  # Severity that fails the pipeline: info | minor | major | critical | blocker.
+  # Empty reports without gating. The report is written before the exit code is
+  # decided, so the artifact survives a failure.
+  FOSSID_FAIL_ON: ""
+
+  # Set to "on" ONLY if the scan ran with --vsf-mode new/all. Off, the scan
+  # emits an empty vsf_issues that is indistinguishable from "looked and found
+  # none", so the converter omits the CVE field rather than asserting a result
+  # nobody checked.
+  FOSSID_CVE: "off"
+
+.codequality-report:
+  artifacts:
+    when: always
+    expire_in: 1 week
+    paths: [$FOSSID_REPORT]
+    reports:
+      codequality: $FOSSID_REPORT
+
+toolbox-codequality:
+  extends: .codequality-report
+  stage: report
+  image: python:3.12-alpine
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  # Uncomment when pairing with the gitlab-diff-scan template:
+  # needs: [toolbox-diffscan]
+  script:
+    - case "$FOSSID_CVE" in on|true|1) CVE="--cve" ;; *) CVE="" ;; esac
+    - >
+      python3 ci/fossid-codequality.py "$FOSSID_RAW" -o "$FOSSID_REPORT" $CVE
+      ${FOSSID_SEVERITY:+--severity "$FOSSID_SEVERITY"}
+      ${CVE:+${FOSSID_CVE_SEVERITY:+--cve-severity "$FOSSID_CVE_SEVERITY"}}
+      ${FOSSID_COMMENT:+--comment "$FOSSID_COMMENT"}
+      ${WORKBENCH_SCAN_URL:+--workbench-url "$WORKBENCH_SCAN_URL"}
+      ${FOSSID_FAIL_ON:+--fail-on "$FOSSID_FAIL_ON"}
+
+# The MR widget shows the DIFFERENCE between this MR's report and the TARGET
+# BRANCH's report. With no pipeline on the target branch there is no base
+# report, the comparison returns nothing, and neither the widget nor the inline
+# annotations appear however many findings the MR produced.
+#
+# This publishes an empty reference report so the comparison has something to
+# run against. Empty is correct rather than lazy: with --license-mode new the
+# scan already reports only what is absent from the target branch, so the
+# reference report is empty by construction and costs no scan.
+#
+# Switching the scan to --license-mode all means replacing this with a real
+# scan of the default branch, or the widget will report existing debt as new.
+toolbox-reference-report:
+  extends: .codequality-report
+  stage: report
+  image: python:3.12-alpine
+  variables:
+    GIT_STRATEGY: none
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  script:
+    - echo '[]' > "$FOSSID_REPORT"

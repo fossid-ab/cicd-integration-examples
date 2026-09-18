@@ -1,0 +1,74 @@
+# FossID GitLab DiffScan
+#
+# Scans what a merge request CHANGES and writes the findings as JSON. Nothing
+# is rendered here: this template's whole output is one artifact,
+# $FOSSID_RAW, for a downstream job to turn into whatever your process wants.
+#
+#   include:
+#     - local: ci/fossid-diff-scan.gitlab-ci.yml
+#
+# Pairs with, in the same repository:
+#   code-quality-runner    $FOSSID_RAW -> a GitLab Code Quality report
+#   notes-api-diff-runner  that report -> merge request threads
+#
+# Requires fossid-toolbox 1.7+, which is where `--format json` arrives.
+# See README.md.
+
+# Declared for standalone use. When this file is `include`d, the including
+# file's `stages` wins and any declared here are dropped -- so a pipeline that
+# defines its own stages needs one named `scan`, or edit the `stage:` below.
+# Without that GitLab rejects the pipeline with "chosen stage does not exist".
+stages:
+  - scan
+
+variables:
+  FOSSID_IMAGE: "quay.io/fossid/fossid-toolbox:latest"
+  DOCKER_AUTH_CONFIG: '{"auths":{"quay.io":{"auth":"$QUAY_AUTH"}}}'
+
+  # off | new | all. "new" reports only what is absent from the target branch,
+  # which is what makes this a diff scan rather than a full one.
+  FOSSID_LICENSE_MODE: "new"
+
+  # Opt-in. Vulnerability scanning is separately licensed, so this stays off
+  # unless you have it. Left off, the output carries `"vsf_issues": []` --
+  # which is byte-identical to a scan that looked and found none, so downstream
+  # tools should not read it as "no CVEs" unless you turned this on.
+  FOSSID_VSF_MODE: "off"
+
+  FOSSID_RAW: "fossid-diffscan.json"
+
+toolbox-diffscan:
+  stage: scan
+  image:
+    name: $FOSSID_IMAGE
+    entrypoint: [""]
+  # diffscan compares two refs, so it only applies to merge request pipelines.
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  script:
+    # Fail readably instead of letting the toolbox dial "https://scan/".
+    - ': "${KB_URL:?set it under Settings > CI/CD > Variables}"'
+    - ': "${KB_TOKEN:?set it under Settings > CI/CD > Variables}"'
+    # --base-ref takes the BARE branch name. GitLab clones shallow and fetches
+    # only the source branch, so the target branch is not in the checkout;
+    # given `main` the toolbox fetches it itself, given `origin/main` it looks
+    # for a remote ref literally called that and fails.
+    #
+    # No --fail here: findings should exit 0 so only real errors fail the job.
+    # Gate downstream, on the rendered report, where the threshold belongs.
+    - >
+      fossid diffscan
+      --host "$KB_URL" --token "$KB_TOKEN"
+      --repository-path .
+      --base-ref "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
+      --compare-ref "$CI_COMMIT_SHA"
+      --license-mode "$FOSSID_LICENSE_MODE"
+      --vsf-mode "$FOSSID_VSF_MODE"
+      --format json
+      > "$FOSSID_RAW"
+  artifacts:
+    # `when: always` so a failed scan still leaves whatever it wrote behind to
+    # look at, and so a downstream `needs` does not fail for a missing file.
+    when: always
+    expire_in: 1 week
+    paths: [$FOSSID_RAW]

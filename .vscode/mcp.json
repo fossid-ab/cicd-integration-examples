@@ -1,0 +1,12 @@
+{
+  "servers": {
+    "fossid-editor": {
+      "type": "sse",
+      "url": "http://127.0.0.1:39814/sse"
+    },
+    "fossid-mcp": {
+      "type": "http",
+      "url": "http://127.0.0.1:39815/mcp"
+    }
+  }
+}

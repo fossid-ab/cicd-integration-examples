@@ -1,0 +1,230 @@
+# FossID GitLab Release Full Scan
+#
+# Scans the WHOLE tree with the Workbench agent when you cut a release, gates
+# on the result, and attaches the reports to the pipeline. Where the diff-scan
+# template answers "what did this merge request add?", this one answers "what
+# is in the thing we are about to ship?".
+#
+#   include:
+#     - local: ci/fossid-release-full-scan.gitlab-ci.yml
+#
+# Standalone by design: it shares no files with the other templates, and it
+# talks to Workbench rather than to the scan server the toolbox uses.
+#
+# Required CI/CD variables, all masked:
+#   WORKBENCH_URL    https://workbench.example.com/api.php   (note the /api.php)
+#   WORKBENCH_USER   Workbench username
+#   WORKBENCH_TOKEN  Workbench API token
+#
+# The agent reads all three from the environment, so they never appear in a
+# command a job log could echo.
+#
+# See README.md.
+
+# Declared for standalone use. When this file is `include`d the including
+# file's `stages` wins, so a pipeline with its own stages needs ones named
+# `scan` and `report`, or edit the `stage:` keys below.
+stages:
+  - scan
+  - report
+
+variables:
+  # One Workbench Project per GitLab project, one Scan per release or per merge
+  # to the mainline. Naming the Scan after the tag makes Workbench mirror your
+  # releases, and lets an auditor find the exact scan behind a shipped version.
+  WORKBENCH_PROJECT: "$CI_PROJECT_NAME"
+
+  # Empty means "derive it": the tag on a release, or `<branch>-<short sha>` on
+  # a merge to the mainline. It cannot simply be "$CI_COMMIT_TAG" any more --
+  # that is empty on a branch pipeline, and the agent would be handed
+  # `--scan ""`. Set it to pin one name.
+  WORKBENCH_SCAN: ""
+
+  # Reuse identifications already made anywhere in Workbench, which is the
+  # point of keeping every release in one Project: an audit done once for a
+  # component is not redone next release, and the scan of a merge to the
+  # mainline comes back with only what that merge actually introduced left
+  # pending. Narrow it with --reuse-my-identifications or
+  # --reuse-project-ids NAME.
+  WORKBENCH_REUSE: "--reuse-any-identification"
+
+  # What fails the pipeline. Empty gates nothing and only reports -- start
+  # there, then tighten once you know what a clean release looks like.
+  #   --fail-on-pending             unreviewed matches remain
+  #   --fail-on-policy              a license policy rule is broken
+  #   --fail-on-vuln-severity high  a vulnerability at/above this severity
+  WORKBENCH_GATE: ""
+
+  # Blank downloads every available report type.
+  WORKBENCH_REPORT_TYPE: "xlsx,spdx"
+
+  # Where a HUMAN reaches Workbench, used to build a link straight to the files
+  # still awaiting identification. Leave it empty and it is derived from
+  # WORKBENCH_URL by dropping /api.php, which is correct when the runner and a
+  # browser reach Workbench at the same address.
+  #
+  # Set it when they differ -- a Docker network, split-horizon DNS, an internal
+  # hostname the runner uses. Otherwise the pipeline prints a link nobody can
+  # open: WORKBENCH_URL is the address the JOB needs, not the reviewer.
+  #   WORKBENCH_UI_URL: "https://workbench.example.com"
+  WORKBENCH_UI_URL: ""
+
+.workbench:
+  image:
+    name: ghcr.io/fossid-ab/workbench-agent-ce:latest
+    entrypoint: [""]
+  variables:
+    # The agent uploads the working tree, so a full checkout is required --
+    # unlike a diff scan, which only needs the two refs.
+    GIT_DEPTH: 0
+  before_script:
+    - ': "${WORKBENCH_URL:?set it under Settings > CI/CD > Variables}"'
+    - ': "${WORKBENCH_USER:?set it under Settings > CI/CD > Variables}"'
+    - ': "${WORKBENCH_TOKEN:?set it under Settings > CI/CD > Variables}"'
+    # Browser-facing base, trailing slash removed so joining a path is safe.
+    - WB_UI="${WORKBENCH_UI_URL:-${WORKBENCH_URL%/api.php}}"; WB_UI="${WB_UI%/}"
+    # The Scan name. Derived here rather than in `variables:` because it
+    # depends on WHICH pipeline this is, and because all three jobs below must
+    # arrive at the same answer -- they run in separate containers, so each
+    # recomputes it from the same CI variables instead of passing it along.
+    - |
+      WB_SCAN="$WORKBENCH_SCAN"
+      if [ -z "$WB_SCAN" ]; then
+        if [ -n "${CI_COMMIT_TAG:-}" ]; then
+          WB_SCAN="$CI_COMMIT_TAG"                                   # a release
+        else
+          WB_SCAN="${CI_COMMIT_REF_NAME}-${CI_COMMIT_SHORT_SHA}"     # a merge to the mainline
+        fi
+      fi
+      echo "workbench: project '$WORKBENCH_PROJECT', scan '$WB_SCAN'"
+    # The audit link, from the scan id in whatever the agent printed.
+    #
+    # The id is read back out of the agent's own output rather than resolved
+    # through the API: the agent already prints a /nui/scans/<id>/... link, so
+    # a number lifted from it needs no extra call and no second source of truth
+    # for which scan this run touched. Only the origin is swapped, because
+    # WORKBENCH_URL may not be reachable from a browser.
+    - |
+      workbench_pending_url() {
+        local id
+        id=$(sed -n 's#.*/nui/scans/\([0-9][0-9]*\)/.*#\1#p' "$1" | head -1)
+        [ -n "$id" ] || return 1
+        printf '%s/nui/scans/%s/audit/pending\n' "$WB_UI" "$id"
+      }
+    # Print it where a reader will look, and leave it on disk for the job's
+    # artifacts. Never fails the job: a missing link is not a broken release.
+    - |
+      announce_pending() {
+        local url
+        if ! url=$(workbench_pending_url "$1"); then
+          echo "workbench: no scan id in the agent output, so no audit link"
+          return 0
+        fi
+        mkdir -p reports
+        printf '%s\n' "$url" > reports/workbench-pending.url
+        printf '[Identification required](%s)\n' "$url" > reports/workbench-pending.md
+        echo
+        echo "=============================================================="
+        echo " Files awaiting identification:"
+        echo "   $url"
+        echo "=============================================================="
+      }
+  # Two things earn a full scan. A tag, because it is what you ship. And a
+  # merge to the mainline, because that is the first moment the merged tree
+  # exists as a whole -- a diff scan only ever saw one side of it. With reuse
+  # on, the second costs an audit only for what the merge introduced.
+  #
+  # Drop the second rule if a scan per merge is more than your Workbench wants;
+  # the tag scan alone still records every release.
+  rules:
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+wa-release-scan:
+  extends: .workbench
+  stage: scan
+  script:
+    # pipefail so the agent's exit code survives the pipe into tee -- without
+    # it a failed scan would look successful because tee succeeded.
+    - set -o pipefail
+    # Passing the directory uploads the tree; the agent handles the archiving.
+    - >
+      workbench-agent scan
+      --project "$WORKBENCH_PROJECT"
+      --scan "$WB_SCAN"
+      --path .
+      $WORKBENCH_REUSE
+      --autoid-file-licenses
+      --autoid-file-copyrights
+      --show-summary
+      2>&1 | tee agent-scan.log
+    - announce_pending agent-scan.log
+  artifacts:
+    when: always
+    expire_in: 30 days
+    paths: [reports/]
+
+wa-release-gate:
+  extends: .workbench
+  stage: report
+  needs: [wa-release-scan]
+  # Separate from the scan so a failed gate does not cost you the scan, and so
+  # the reports job below still runs and gives you the evidence for why.
+  script:
+    - set -o pipefail
+    # The gate's exit code is the job's verdict, but the link has to be printed
+    # either way -- and it matters MOST when the gate just failed on pending
+    # identifications, because it is the answer to "so where do I go fix it?".
+    # So: capture the status, announce, then exit with it.
+    - |
+      status=0
+      workbench-agent evaluate-gates \
+        --project "$WORKBENCH_PROJECT" \
+        --scan "$WB_SCAN" \
+        $WORKBENCH_GATE 2>&1 | tee agent-gate.log || status=$?
+      announce_pending agent-gate.log
+      exit $status
+  artifacts:
+    when: always
+    expire_in: 30 days
+    paths: [reports/]
+
+wa-release-reports:
+  extends: .workbench
+  stage: report
+  # `needs` on the gate rather than the scan, but with a rule that runs even
+  # when the gate failed: a blocked release is exactly when you want the
+  # spreadsheet explaining what blocked it.
+  #
+  # `artifacts: true` so the gate's reports/ -- which holds the audit link --
+  # is pulled in and the spreadsheets land beside it. One bundle then answers
+  # both "what is in the release" and "where do I go finish auditing it".
+  needs:
+    - job: wa-release-gate
+      artifacts: true
+  rules:
+    - if: $CI_COMMIT_TAG
+      when: always
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: always
+  script:
+    - set -o pipefail
+    - mkdir -p reports
+    - >
+      workbench-agent download-reports
+      --project "$WORKBENCH_PROJECT"
+      --scan "$WB_SCAN"
+      --report-scope scan
+      ${WORKBENCH_REPORT_TYPE:+--report-type "$WORKBENCH_REPORT_TYPE"}
+      --report-save-path reports/
+      2>&1 | tee agent-reports.log
+    # Re-announced here so the link is in the log of the job whose artifacts
+    # you are about to download, not only in an earlier job's.
+    - announce_pending agent-reports.log
+  artifacts:
+    when: always
+    # Longer than the other templates on purpose: a release scan is the record
+    # of what you shipped, and outlives the merge request that led to it.
+    expire_in: never
+    paths:
+      - reports/
