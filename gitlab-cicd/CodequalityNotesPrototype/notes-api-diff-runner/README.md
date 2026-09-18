@@ -18,7 +18,7 @@ stays upstream in one place.
 This is the piece most likely to end up inside a larger runner, so it is kept
 as small as the job allows:
 
-- Standard library only. One file, 264 lines, over a third of which is documentation.
+- Standards library only. One file, 264 lines, over a third of which is documentation.
 - **No diff parsing.** It posts optimistically and lets GitLab reject what it
   cannot place (see below).
 - No state anywhere but the merge request itself.
@@ -38,6 +38,7 @@ Copy `.gitlab-ci.yml` and `ci/fossid-mr-notes.py`. Set `FOSSID_MR_TOKEN`.
 | `FOSSID_REPORT` | `gl-code-quality-report.json` | Input |
 | `FOSSID_NOTES_MAX` | `25` | Findings past this go to one summary comment |
 | `FOSSID_API_URL` | `$CI_API_V4_URL` | Override when the runner cannot reach that address |
+| `WORKBENCH_SCAN_URL` | *(empty)* | Audit link added to the summary comment. Set by [workbench-mr-review](../workbench-mr-review/); empty omits it |
 
 In CI the target is taken from `CI_API_V4_URL`, `CI_PROJECT_ID` and
 `CI_MERGE_REQUEST_IID`, so there is usually nothing else to configure.
@@ -49,13 +50,32 @@ In CI the target is taken from `CI_API_V4_URL`, `CI_PROJECT_ID` and
 is unmistakable:
 
 ```
-fossid-mr-notes: ERROR - cannot read MR !1: 0 [Errno 111] Connection refused
+toolbox-mr-notes: ERROR - cannot read MR !1: 0 [Errno 111] Connection refused
 ```
 
 Set `FOSSID_API_URL` to an address the runner can reach. This bites whenever
 the runner talks to GitLab by another name — split-horizon DNS, a reverse
 proxy, or a Docker network where `external_url` says `localhost`. It is not a
 credential problem, so check it before regenerating tokens.
+
+## The action-needed link
+
+Set `WORKBENCH_SCAN_URL` and the summary comment closes with a line naming where the
+work gets done:
+
+```
+**Action needed**: Workbench Scan: https://workbench.example.com/nui/scans/1487/audit/pending
+```
+
+Nothing here produces that variable. [workbench-mr-review](../workbench-mr-review/)
+does, as a dotenv artifact, and this template picks it up with no configuration.
+Inline threads already carry it, since a thread renders the finding's own body
+verbatim and the report was built with it. The summary comment has no finding
+body to inherit from, which is why it is passed here too. Left empty the line is
+omitted entirely.
+
+A dotenv variable reaches only the jobs that name its producer directly in
+`needs:`, so wire this job to `wa-mr-review` — see that template's README.
 
 ## The token
 
@@ -127,8 +147,8 @@ once and matching fingerprints skipped, so re-running on the same commit posts
 nothing:
 
 ```
-fossid-mr-notes: 1 finding(s) already on this MR
-fossid-mr-notes: posted 0 thread(s), 1 already present, 0 in the summary
+toolbox-mr-notes: 1 finding(s) already on this MR
+toolbox-mr-notes: posted 0 thread(s), 1 already present, 0 in the summary
 ```
 
 One page of discussions is read, not all of them — past 100 threads on a single

@@ -1,7 +1,9 @@
 # FossID GitLab CI templates
 
-Four templates, each distributable on its own. Copy the one you want into a
-repository, or `include:` it. None of them depends on another being present.
+Five templates. Copy the one you want into a repository, or `include:` it.
+The first four are distributable on their own and depend on nothing else being
+present; the fifth reads the diff scan's report, so it wants that one alongside
+it.
 
 | Template | Answers | Needs |
 | --- | --- | --- |
@@ -9,6 +11,16 @@ repository, or `include:` it. None of them depends on another being present.
 | [gitlab-release-full-scan](gitlab-release-full-scan/) | What is in the release we are about to ship? | `WORKBENCH_URL`, `WORKBENCH_USER`, `WORKBENCH_TOKEN` |
 | [code-quality-runner](code-quality-runner/) | Show a diff scan in the merge request widget | nothing |
 | [notes-api-diff-runner](notes-api-diff-runner/) | Show it as merge request comments instead | `FOSSID_MR_TOKEN` |
+| [workbench-mr-review](workbench-mr-review/) | Where does someone actually resolve it? | `WORKBENCH_URL`, `WORKBENCH_USER`, `WORKBENCH_TOKEN` |
+
+Every folder has the same shape, so any one of them copies or zips on its own:
+
+```
+<template>/
+  .gitlab-ci.yml    the jobs, with every setting commented at its default
+  README.md         what it does, what it needs, and why it is built that way
+  ci/*.py           only the two renderers have scripts; stdlib only
+```
 
 ## How they compose
 
@@ -21,7 +33,10 @@ gitlab-diff-scan      →  fossid-diffscan.json
 code-quality-runner   →  gl-code-quality-report.json    (MR widget + inline)
 notes-api-diff-runner →  merge request threads
 
-gitlab-release-full-scan  →  reports/*.xlsx, reports/*.spdx   (independent)
+workbench-mr-review   →  a Workbench Scan + WORKBENCH_SCAN_URL (dotenv)
+                         which both renderers append to every finding
+
+gitlab-release-full-scan  →  reports/  (xlsx, SPDX RDF, audit link)   (independent)
 ```
 
 That is the whole contract. A renderer does not care what produced its input,
@@ -30,7 +45,7 @@ replaced by something of your own that writes the same file. Both renderers
 parse only the documented format — nothing FossID-shaped — so the decisions
 about *what a finding says* stay in one place.
 
-Running all three merge-request templates together is the full pipeline:
+Running the merge-request templates together is the full pipeline:
 
 ```yaml
 stages: [scan, report]
@@ -39,10 +54,24 @@ include:
   - local: ci/fossid-diff-scan.gitlab-ci.yml
   - local: ci/fossid-code-quality.gitlab-ci.yml
   - local: ci/fossid-mr-notes.gitlab-ci.yml
+  - local: ci/workbench-mr-review.gitlab-ci.yml   # optional
 ```
 
 then uncomment the `needs:` line in each renderer, so a job waits for its input
-instead of racing it.
+instead of racing it. With `workbench-mr-review` in the pipeline, both renderers
+must name **that** job too — a dotenv variable reaches only the jobs that need
+its producer directly, so `toolbox-mr-notes` does not inherit
+`WORKBENCH_SCAN_URL` through `toolbox-codequality`. List it as
+`optional: true` and the pipeline stays valid without it. Add the release template's `include:` alongside them and
+nothing collides: it runs on tags, the renderers on merge requests, and the
+Code Quality reference report on the default branch.
+
+[`local-test/run-js-templates.sh`](../local-test/run-js-templates.sh) builds
+exactly that — a project with the four core templates wired together — against a
+local GitLab, if you want to watch it work before committing to it.
+[`local-test/update-templates.sh`](../local-test/update-templates.sh) pushes a
+later edit onto a branch of that project, adding `workbench-mr-review`, so a
+change can be re-tested without rebuilding it.
 
 ## Picking a renderer
 
@@ -58,6 +87,22 @@ where a reviewer argues with a specific finding.
 | Survives after merge | No, the artifact expires | Yes |
 | Extra credentials | None | A token with `api` scope |
 | Noise | One widget list | One comment per finding, capped |
+
+## The URL both renderers get wrong by default
+
+Three templates build a URL for a human to click, and all default to an address
+that a CI job can reach but a browser may not:
+
+| Template | Variable | Defaults to | Symptom when wrong |
+| --- | --- | --- | --- |
+| notes-api-diff-runner | `FOSSID_API_URL` | `$CI_API_V4_URL` | `Connection refused` reading the MR |
+| gitlab-release-full-scan | `WORKBENCH_UI_URL` | `WORKBENCH_URL` minus `/api.php` | A printed audit link nobody can open |
+| workbench-mr-review | `WORKBENCH_UI_URL` | `WORKBENCH_URL` minus `/api.php` | Every finding points at a link nobody can open |
+
+Both defaults are right when the runner and a browser reach the service at the
+same address, and wrong the moment they do not — a Docker network, a reverse
+proxy, split-horizon DNS, or an instance whose `external_url` says `localhost`.
+Neither is a credential problem, so check them before regenerating tokens.
 
 ## Stages
 

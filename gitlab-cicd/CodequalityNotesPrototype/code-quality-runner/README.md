@@ -18,7 +18,7 @@ path or updating the path in the job.
 
 Its input is whatever `fossid diffscan --format json` wrote — the
 [gitlab-diff-scan](../gitlab-diff-scan/) template produces exactly that file, so
-uncomment `needs: [fossid-diffscan]` when using them together.
+uncomment `needs: [toolbox-diffscan]` when using them together.
 
 ## Settings
 
@@ -31,10 +31,28 @@ No credentials. Everything is optional:
 | `FOSSID_COMMENT` | *(empty)* | Free-text note added to every finding |
 | `FOSSID_FAIL_ON` | *(empty)* | `info`\|`minor`\|`major`\|`critical`\|`blocker`. Empty reports without gating |
 | `FOSSID_CVE` | `off` | Note CVEs on findings. Only if the scan ran with `--vsf-mode new/all` |
+| `WORKBENCH_SCAN_URL` | *(empty)* | Audit link added to every finding. Set by [workbench-mr-review](../workbench-mr-review/); empty omits the field |
 
 `FOSSID_FAIL_ON` writes the report **before** deciding the exit code, so the
 artifact survives a failing gate. This is the right place for a threshold — the
 scan job deliberately does not gate, so that only real errors fail it.
+
+## The action-needed link
+
+Set `WORKBENCH_SCAN_URL` and every finding closes with a line naming where the
+work gets done:
+
+```
+**Action needed**: Workbench Scan: https://workbench.example.com/nui/scans/1487/audit/pending
+```
+
+Nothing here produces that variable. [workbench-mr-review](../workbench-mr-review/)
+does, as a dotenv artifact, and this template picks it up with no configuration.
+Left empty the field is omitted entirely rather than rendered as a dead link, so
+this stays correct on its own.
+
+A dotenv variable reaches only the jobs that name its producer directly in
+`needs:`, so wire this job to `wa-mr-review` — see that template's README.
 
 ## The default branch needs a pipeline, or the MR shows nothing
 
@@ -49,11 +67,11 @@ base_pipeline : nil           -> 0 pipelines on main
 compare       : new=0  resolved=0  existing=0     -> widget empty
 ```
 
-That is why the template includes a `fossid-baseline` job: it runs on the
-default branch and publishes an empty report. Empty is correct rather than lazy
-— with `--license-mode new` the scan already reports only what is absent from
-the target branch, so the baseline is empty by construction and costs no scan.
-After adding it:
+That is why the template includes a `toolbox-reference-report` job: it runs on
+the default branch and publishes an empty report. Empty is correct rather than
+lazy — with `--license-mode new` the scan already reports only what is absent
+from the target branch, so the reference report is empty by construction and
+costs no scan. After adding it:
 
 ```
 base_pipeline : 3
@@ -64,9 +82,43 @@ new_errors    : 12            -> widget populated
 If you switch the scan to `--license-mode all`, replace that job with a real
 scan of the default branch, or the widget will report pre-existing debt as new.
 
-**The MR's branch point matters too.** The base report is looked up at the merge
-base SHA, so a branch created before the baseline job existed still has no base
-pipeline. Branch from a commit the default-branch pipeline has run on.
+**The MR's branch point matters too.** The base report is looked up at the
+merge base SHA, so a branch created before the reference-report job existed
+still has no base pipeline. Branch from a commit the default-branch pipeline
+has run on.
+
+**And so does the target branch.** The lookup is by merge-base SHA *and* ref,
+matching the target branch — so an MR that targets anything other than the
+default branch finds no reference report there and shows an empty widget,
+however much the scan found:
+
+```
+MR !2  ProjectMix -> vendor-text-helpers        (42 findings in the head report)
+diff_base_sha  : 17e27e64
+pipelines at that sha:
+  76  ref=refs/merge-requests/1/head  codequality=true   <- has a report, wrong ref
+base_pipeline  : nil
+compare        : {:status=>:parsing}      -> widget empty, no inline annotations
+```
+
+This is the confusing one, because the notes runner has no such dependency: its
+threads appear on every finding as usual, so the scan visibly worked while the
+widget looks like it missed everything.
+
+If merge requests in your repository target long-lived branches, publish the
+reference report on every branch instead of only the default one:
+
+```yaml
+toolbox-reference-report:
+  rules:
+    - if: $CI_COMMIT_BRANCH
+```
+
+It costs a 4-second job with `GIT_STRATEGY: none`, and under `--license-mode
+new` the report is empty by construction either way. Existing MRs are not
+retroactively fixed — their merge base still has no reference-report pipeline —
+so an MR opened before the change needs a rebase onto a commit that has one, or
+a retarget to a branch that does.
 
 ## Two places findings appear
 
@@ -85,8 +137,8 @@ return if pipeline.has_codequality_mr_diff_report?         # already built
 return unless new_errors_introduced?                       # NEW vs the base report
 ```
 
-That third gate is why the baseline job matters twice over: without a base
-pipeline there are no "new" errors, so **neither** the widget **nor** the
+That third gate is why the reference-report job matters twice over: without a
+base pipeline there are no "new" errors, so **neither** the widget **nor** the
 inline annotations appear.
 
 Because the artifact is written after the pipeline completes, annotations show

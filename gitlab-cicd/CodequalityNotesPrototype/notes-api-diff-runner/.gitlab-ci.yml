@@ -1,0 +1,62 @@
+# FossID Notes API Diff Runner
+#
+# Posts a GitLab Code Quality report to a merge request as diff threads, using
+# the Notes API. One thread per finding, anchored to the lines it covers.
+#
+#   include:
+#     - local: ci/fossid-mr-notes.gitlab-ci.yml
+#
+# Input  $FOSSID_REPORT  a Code Quality report -- the code-quality-runner
+#                        template writes exactly this file. The script parses
+#                        nothing FossID-specific, so any Code Quality report
+#                        works, whatever produced it.
+#
+# Why alongside the Code Quality report rather than instead of it: the Code
+# Quality integration draws its inline marker from `location.lines.begin` and
+# discards `end`, so a 131-line match marks one line, and it renders only
+# findings that are NEW against the target branch's report -- which needs a
+# pipeline on the default branch to compare against. Diff threads have neither
+# limit, and are resolvable. The cost is a writable token and comments that
+# accumulate on the merge request.
+#
+# See README.md for the token, and for which lines a thread can anchor to.
+
+# Declared for standalone use; an including pipeline's `stages` wins.
+stages:
+  - report
+
+variables:
+  FOSSID_REPORT: "gl-code-quality-report.json"
+
+  # Findings past this many threads go into one summary comment instead, so a
+  # scan that lights up a vendored tree does not leave 400 comments behind.
+  FOSSID_NOTES_MAX: "25"
+
+  # Where the job reaches the API. $CI_API_V4_URL is built from the instance's
+  # external_url, which is the address a BROWSER uses -- not necessarily one a
+  # job container can resolve. Override this when the runner reaches GitLab by
+  # another name: split-horizon DNS, a reverse proxy, or a Docker network where
+  # external_url says localhost. Symptom is "Connection refused" on read.
+  FOSSID_API_URL: "$CI_API_V4_URL"
+
+toolbox-mr-notes:
+  stage: report
+  image: python:3.12-alpine
+  # allow_failure so this can never take down a pipeline whose real output is
+  # the scan and the report. An expired token should cost you comments, not a
+  # merge request.
+  allow_failure: true
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  # Uncomment when pairing with the code-quality-runner template:
+  # needs: [toolbox-codequality]
+  script:
+    # CI_JOB_TOKEN cannot write notes, so this needs a real token -- a project
+    # access token with api scope is the right one. See README.md.
+    - ': "${FOSSID_MR_TOKEN:?set it under Settings > CI/CD > Variables}"'
+    - >
+      GITLAB_TOKEN="$FOSSID_MR_TOKEN"
+      python3 ci/fossid-mr-notes.py "$FOSSID_REPORT"
+      --api "$FOSSID_API_URL"
+      --max-threads "$FOSSID_NOTES_MAX"
+      ${WORKBENCH_SCAN_URL:+--workbench-url "$WORKBENCH_SCAN_URL"}

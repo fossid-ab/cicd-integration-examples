@@ -1,0 +1,159 @@
+# FossID Workbench: MR review scan
+#
+# Opens a merge request as a Scan in a dedicated Workbench Project, so an
+# auditor can work the findings properly while the developer keeps getting
+# inline feedback in the merge request.
+#
+#   include:
+#     - local: ci/workbench-mr-review.gitlab-ci.yml
+#
+# Pairs with, in the same repository:
+#   gitlab-diff-scan       produces $FOSSID_RAW, which decides whether there
+#                          is anything worth opening a review scan for
+#   code-quality-runner    renders the findings, and points each one at the
+#                          scan this template opens
+#   notes-api-diff-runner  the same link on the summary comment
+#
+# What it exports
+# ---------------
+# WORKBENCH_SCAN_URL -- a browser-facing link to the scan, as a dotenv
+# artifact. The two renderers pick it up automatically and close every finding
+# with:
+#
+#   **Action needed**: Workbench Scan: <url>
+#
+# A dotenv variable reaches only jobs that name the producing job in `needs:`,
+# so wire both renderers to this job -- see README.md.
+#
+# Requires a Workbench instance the runner can reach. See README.md.
+
+# Declared for standalone use. When this file is `include`d the including
+# file's `stages` wins, so a pipeline with its own stages needs one named
+# `scan`, or edit the `stage:` key below.
+stages:
+  - scan
+
+variables:
+  # The report gitlab-diff-scan writes, which is read here to decide the review
+  # scope. Same default as that template and code-quality-runner.
+  FOSSID_RAW: "fossid-diffscan.json"
+
+  # Kept separate from the Project that records releases: these are transient
+  # review scans, not the record of what shipped.
+  WORKBENCH_MR_PROJECT: "$CI_PROJECT_NAME-mr-review"
+
+  # Reuse identifications from all of Workbench, so anything already audited on
+  # the mainline comes back already identified and the auditor only sees what is
+  # genuinely new.
+  WORKBENCH_REUSE: "--reuse-any-identification"
+
+  # Upload only the files the merge request touched, not the whole repository.
+  WORKBENCH_MR_SCOPE: "changed"
+
+  # Where a HUMAN opens Workbench. WORKBENCH_URL is the address the JOB needs
+  # and is not necessarily reachable from a browser, so only the origin is
+  # swapped. Empty derives it from WORKBENCH_URL by dropping /api.php, which
+  # is correct when both reach Workbench at the same address.
+  WORKBENCH_UI_URL: ""
+
+wa-mr-review:
+  # In `scan`, not `report`: the report jobs consume WORKBENCH_SCAN_URL from
+  # this job, so it has to land before them. It only ever needed
+  # toolbox-diffscan, so moving it earlier costs nothing.
+  stage: scan
+  image:
+    name: ghcr.io/fossid-ab/workbench-agent-ce:latest
+    entrypoint: [""]
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  # Uncomment when this runs alongside gitlab-diff-scan: the review scope is
+  # read from that job's report, so it must wait for it.
+  # needs:
+  #   - job: toolbox-diffscan
+  #     artifacts: true
+  variables:
+    GIT_DEPTH: 0
+  script:
+    - |
+      set -e
+      : "${WORKBENCH_URL:?set it under Settings > CI/CD > Variables}"
+
+      # Written up front and possibly overwritten below. The report jobs read
+      # this variable, and an early exit here is a normal outcome (nothing to
+      # review), so the file has to exist even then -- an absent dotenv would
+      # fail the artifact upload rather than simply leave the link off.
+      echo "WORKBENCH_SCAN_URL=" > workbench-scan.env
+
+      # Toolbox decides whether this MR is worth a review project. Job-level
+      # `rules` cannot see another job's output, so the check happens here and
+      # the job exits cleanly when there is nothing to review.
+      if [ ! -s "$FOSSID_RAW" ]; then
+        echo "No diffscan output; nothing to review."; exit 0
+      fi
+
+      # Stage exactly the files Toolbox flagged. Taken from the scan report
+      # rather than `git diff`: it is the precise review scope, and the agent
+      # image ships no git.
+      python3 - "$FOSSID_RAW" .mr-review <<'PY'
+      import json, os, shutil, sys
+      report, dest = sys.argv[1], sys.argv[2]
+      doc = json.load(open(report))
+      paths = sorted({(i.get("local_file") or {}).get("path")
+                      for i in doc.get("license_issues") or []} - {None})
+      shutil.rmtree(dest, ignore_errors=True)
+      staged = 0
+      for rel in paths:
+          if os.path.isfile(rel):
+              os.makedirs(os.path.join(dest, os.path.dirname(rel)) or dest, exist_ok=True)
+              shutil.copy2(rel, os.path.join(dest, rel))
+              staged += 1
+          else:
+              print("  skipped (not in checkout): %s" % rel)
+      print("flagged files: %d, staged: %d" % (len(paths), staged))
+      open("staged.count", "w").write(str(staged))
+      PY
+
+      if [ "$(cat staged.count)" -eq 0 ]; then
+        echo "Toolbox found nothing in this MR; not creating a review scan."
+        exit 0
+      fi
+
+      SCAN_NAME="MR-${CI_MERGE_REQUEST_IID}-${CI_COMMIT_SHORT_SHA}"
+      echo "Opening review scan '$SCAN_NAME' in project '$WORKBENCH_MR_PROJECT'."
+      # Captured to a file so the audit link can be lifted from the same output
+      # the log shows. NOT piped to tee: that would make the pipeline status
+      # tee's, and a failing agent would pass under `set -e` without pipefail,
+      # which is not guaranteed in this image's shell.
+      if ! workbench-agent scan \
+        --project "$WORKBENCH_MR_PROJECT" \
+        --scan "$SCAN_NAME" \
+        --path .mr-review \
+        $WORKBENCH_REUSE \
+        --show-summary > agent.log 2>&1; then
+        cat agent.log
+        exit 1
+      fi
+      cat agent.log
+
+      # The scan id is read back out of the agent's own output rather than
+      # resolved through the API: the agent already prints a /nui/scans/<id>/
+      # link, so a number lifted from it needs no extra call and no second
+      # source of truth for which scan this run touched. Only the origin is
+      # swapped, because WORKBENCH_URL may not be reachable from a browser.
+      WB_UI="${WORKBENCH_UI_URL:-${WORKBENCH_URL%/api.php}}"; WB_UI="${WB_UI%/}"
+      SCAN_ID=$(sed -n 's#.*/nui/scans/\([0-9][0-9]*\)/.*#\1#p' agent.log | head -1)
+
+      # A missing link is not a broken review: the scan still exists and the
+      # findings still post, so this never fails the job.
+      if [ -n "$SCAN_ID" ]; then
+        SCAN_URL="$WB_UI/nui/scans/$SCAN_ID/audit/pending"
+        echo "WORKBENCH_SCAN_URL=$SCAN_URL" > workbench-scan.env
+        echo "Workbench Scan: $SCAN_URL"
+      else
+        echo "No scan id in the agent output, so findings carry no audit link."
+      fi
+  artifacts:
+    when: always
+    expire_in: 1 week
+    reports:
+      dotenv: workbench-scan.env
