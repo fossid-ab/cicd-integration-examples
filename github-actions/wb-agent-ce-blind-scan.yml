@@ -1,0 +1,50 @@
+## Blind scan: only file hashes leave the runner. No source code goes to Workbench.
+## The quay.io image ships FossID Toolbox, so the agent hashes the checkout inside the
+## container, uploads the hashes and runs the scan.
+##
+## Blind scanning trades away the features that need the source on the server.
+## For example, Workbench cannot show a side-by-side source comparison for partial matches.
+##
+## Required secrets:
+##   WORKBENCH_URL, WORKBENCH_USER, WORKBENCH_TOKEN  - Workbench API access
+##   QUAY_USERNAME, QUAY_PASSWORD                    - pull access to quay.io/fossid/workbench-ce-agent
+##                                                     (a robot account is the usual choice)
+
+name: Blind Scan a Branch on Push
+on: push
+
+env:
+  WB_AGENT_IMAGE: quay.io/fossid/workbench-ce-agent:latest
+
+jobs:
+  fossid_scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Log in to quay.io
+        uses: docker/login-action@v3
+        with:
+          registry: quay.io
+          username: ${{ secrets.QUAY_USERNAME }}
+          password: ${{ secrets.QUAY_PASSWORD }}
+
+# LAC extraction is on by default, so the file-level autoid flags have data.
+# Add --run-dependency-analysis if you want dependency analysis as well.
+# For large repos, raise the hashing timeout with --fossid-toolbox-timeout (seconds, default 300).
+# To hash with a Toolbox other than the bundled one, point --fossid-toolbox-path at it.
+      - name: Hash, upload and scan with Workbench Agent CE
+        run: |
+          docker run --rm \
+          -v "$GITHUB_WORKSPACE":/scan_target:ro \
+          "$WB_AGENT_IMAGE" \
+          blind-scan \
+          --api-url ${{ secrets.WORKBENCH_URL }} \
+          --api-user ${{ secrets.WORKBENCH_USER }} \
+          --api-token ${{ secrets.WORKBENCH_TOKEN }} \
+          --project-name "$GITHUB_REPOSITORY" \
+          --scan-name "$GITHUB_REF_NAME" \
+          --path /scan_target \
+          --autoid-file-licenses \
+          --autoid-file-copyrights
