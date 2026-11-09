@@ -16,6 +16,7 @@ For Workbench, the following examples are provided:
 2. `wb-agent-ce-diffscan.yml` - an example of how you can scan only the files changed in a PR
 3. `wb-agent-python.yml` - an example that runs the Workbench Agent as a Python script instead of a container
 4. `wb-agent-ce-import-ort-results.yml` - runs ORT then uploads the results to Workbench for reporting
+5. `wb-agent-ce-blind-scan.yml` - blind scan on push: only file hashes are uploaded to Workbench, no source code
 
 # Combo Workflow
 You can also use both for more complex workflows! For example:
